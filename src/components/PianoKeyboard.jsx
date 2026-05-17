@@ -1,5 +1,6 @@
 import { useMemo, useRef, useEffect } from 'react';
 import { P8 } from '../constants.js';
+import { noteName } from '../utils.js';
 
 const IS_WHITE  = new Set([0, 2, 4, 5, 7, 9, 11]);
 const WHITE_IDX = { 0:0, 2:1, 4:2, 5:3, 7:4, 9:5, 11:6 };
@@ -35,7 +36,7 @@ export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH
         whites.push({
           pitch, active,
           left:  (octave * 7 + WHITE_IDX[note]) * keyW,
-          label: note === 0 ? `C${octaveNum}` : null,
+          label: noteName(pitch),
         });
       } else {
         blacks.push({
@@ -100,18 +101,17 @@ export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH
               opacity: outOfRange ? baseOpacity * 0.38 : baseOpacity,
             }}
           >
-            {label && (
-              <span style={{
-                position: 'absolute', bottom: 3, left: 0,
-                width: keyW, textAlign: 'center',
-                fontSize: Math.max(6, keyW * 0.35),
-                fontFamily: 'monospace',
-                color: active ? P8[4] : P8[5],
-                pointerEvents: 'none',
-              }}>
-                {label}
-              </span>
-            )}
+            <span style={{
+              position: 'absolute', bottom: 3, left: 0,
+              width: keyW, textAlign: 'center',
+              fontSize: Math.max(6, Math.round(keyW * 0.30)),
+              fontFamily: 'monospace',
+              color: active ? P8[4] : (isBass ? '#3a4a7a' : P8[5]),
+              pointerEvents: 'none',
+              userSelect: 'none',
+            }}>
+              {label}
+            </span>
           </div>
           );
         })}
@@ -122,6 +122,7 @@ export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH
           const isBass      = pitch < LEAD_FROM;
           const outOfRange  = rangeHint === 'bass' ? !isBass : rangeHint === 'lead' ? isBass : false;
           const baseOpacity = inScale ? 1 : 0.45;
+          const bkFontSize  = Math.max(5, Math.round(blackW * 0.44));
           return (
           <div
             key={pitch}
@@ -138,10 +139,25 @@ export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH
                 : inScale
                   ? (isBass ? '#0d1a40' : P8[1])
                   : '#2a2a2a',
-              zIndex: 1, cursor: 'pointer',
+              zIndex: 1, cursor: 'pointer', overflow: 'hidden',
               opacity: outOfRange ? baseOpacity * 0.38 : baseOpacity,
             }}
-          />
+          >
+            <span style={{
+              position: 'absolute',
+              top: 3,
+              left: Math.max(1, Math.floor((blackW - bkFontSize) / 2)),
+              fontSize: bkFontSize,
+              fontFamily: 'monospace',
+              color: active ? '#e8d8b8' : (inScale ? '#4a5a88' : '#1c1c1c'),
+              pointerEvents: 'none',
+              userSelect: 'none',
+              writingMode: 'vertical-lr',
+              lineHeight: 1,
+            }}>
+              {noteName(pitch)}
+            </span>
+          </div>
           );
         })}
 

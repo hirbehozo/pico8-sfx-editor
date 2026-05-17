@@ -16,6 +16,7 @@ import NoteEditor      from './components/NoteEditor.jsx';
 import PianoKeyboard   from './components/PianoKeyboard.jsx';
 import TakesList       from './components/TakesList.jsx';
 import ExportPanel     from './components/ExportPanel.jsx';
+import WaveformDisplay from './components/WaveformDisplay.jsx';
 import PatternEditor   from './components/PatternEditor.jsx';
 import HelpModal       from './components/HelpModal.jsx';
 
@@ -562,6 +563,10 @@ export default function App() {
           <TabBar tab={tab} setTab={setTab} isTouch={vp.isTouch} />
           <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
             {tabContent}
+          </div>
+          {/* Oscilloscope — live waveform of the active note */}
+          <div style={{ padding: '8px 12px', borderTop: '1px solid #1c1c1c', flexShrink: 0 }}>
+            <WaveformDisplay currentWaveform={note.waveform} />
           </div>
         </div>
       </div>
