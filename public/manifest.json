@@ -1,0 +1,25 @@
+{
+  "name": "PICO-8 SFX Editor",
+  "short_name": "P8 SFX",
+  "description": "Compose and export PICO-8 compatible chiptune sound effects in the browser",
+  "theme_color": "#1a1c2c",
+  "background_color": "#1a1c2c",
+  "display": "standalone",
+  "orientation": "landscape",
+  "scope": "/",
+  "start_url": "/",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}

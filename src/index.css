@@ -1,0 +1,47 @@
+/* ── Reset ──────────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ── CRT boot flicker: opacity 0.85 → 1 over 200 ms ────────────────────────── */
+@keyframes p8-boot {
+  from { opacity: 0.85; }
+  to   { opacity: 1; }
+}
+
+html {
+  font-family: ui-monospace, 'Courier New', monospace;
+  background: #1a1c2c;
+  color: #c2c3c7;
+  animation: p8-boot 200ms ease-out both;
+}
+
+body {
+  margin: 0;
+  overflow-x: hidden;
+}
+
+/* ── CRT scanline overlay ───────────────────────────────────────────────────── */
+/* Semi-transparent black lines every 3 px (1 px solid, 2 px gap).             */
+/* pointer-events: none ensures the overlay never blocks clicks.                */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2147483647;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent           0px,
+    transparent           2px,
+    rgba(0, 0, 0, 0.12)   2px,
+    rgba(0, 0, 0, 0.12)   3px
+  );
+}
+
+/* ── Scrollbar — PICO-8 palette ─────────────────────────────────────────────── */
+::-webkit-scrollbar               { width: 6px; height: 6px; }
+::-webkit-scrollbar-track         { background: #1a1c2c; }
+::-webkit-scrollbar-thumb         { background: #5f574f; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover   { background: #83769c; }
+
+/* Firefox */
+* { scrollbar-width: thin; scrollbar-color: #5f574f #1a1c2c; }
