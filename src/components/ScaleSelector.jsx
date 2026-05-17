@@ -37,6 +37,7 @@ export default function ScaleSelector({ scaleKey, scaleMode, onKeyChange, onMode
         <select
           value={scaleKey}
           onChange={e => onKeyChange(parseInt(e.target.value, 10))}
+          title="Root note of the scale. All note input snaps to this key."
           style={selTouch}
         >
           {KEY_NAMES.map((name, i) => (
@@ -53,6 +54,7 @@ export default function ScaleSelector({ scaleKey, scaleMode, onKeyChange, onMode
         <select
           value={scaleMode}
           onChange={e => onModeChange(e.target.value)}
+          title="Scale mode. In any mode other than Chromatic, only in-scale notes are playable — great for staying in tune."
           style={selTouch}
         >
           {Object.entries(MODE_LABELS).map(([id, label]) => (

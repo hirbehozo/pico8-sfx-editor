@@ -17,12 +17,13 @@ import WaveformDisplay from './components/WaveformDisplay.jsx';
 import TakesList       from './components/TakesList.jsx';
 import ExportPanel     from './components/ExportPanel.jsx';
 import PatternEditor   from './components/PatternEditor.jsx';
+import HelpModal       from './components/HelpModal.jsx';
 
 const TABS = [
-  { id: 'edit',     label: 'EDIT'     },
-  { id: 'takes',    label: 'TAKES'    },
-  { id: 'export',   label: 'EXPORT'   },
-  { id: 'patterns', label: 'PATTERNS' },
+  { id: 'edit',     label: 'EDIT',     title: 'Edit the selected note — pitch, waveform, volume and effect' },
+  { id: 'takes',    label: 'TAKES',    title: 'Saved snapshots of your SFX for comparison and recovery' },
+  { id: 'export',   label: 'EXPORT',   title: 'Copy SFX data as pico-8 code ready to paste into your cart' },
+  { id: 'patterns', label: 'PATTERNS', title: 'Arrange SFX slots into music patterns using __music__()' },
 ];
 
 // ── Rotate prompt ─────────────────────────────────────────────────────────────
@@ -88,10 +89,11 @@ function TabBar({ tab, setTab, bottom = false, isTouch = false }) {
       flexShrink: 0,
       backgroundColor: '#0d0d0d',
     }}>
-      {TABS.map(({ id, label }) => (
+      {TABS.map(({ id, label, title }) => (
         <button
           key={id}
           onClick={() => setTab(id)}
+          title={title}
           style={{
             flex: 1,
             fontFamily: 'monospace',
@@ -162,6 +164,7 @@ function TabContent({ tab, sfx, sfxSlots, curSfx, selectedNote, savedTakes,
 // ── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
   const [tab, setTab] = useState('edit');
+  const [showHelp, setShowHelp] = useState(false);
   const vp = useViewport();
 
   // ── Scale / mode ────────────────────────────────────────────────────────────
@@ -263,6 +266,7 @@ export default function App() {
   const toolbar = (
     <Toolbar
       curSfx={curSfx}  sfx={sfx}  isPlaying={isPlaying}  isTouch={vp.isTouch}
+      onHelp={() => setShowHelp(true)}
       onPrev={() => setCurSfx(Math.max(0, curSfx - 1))}
       onNext={() => setCurSfx(Math.min(63, curSfx + 1))}
       onPlay={playSfx}  onStop={stopPlay}
@@ -335,6 +339,7 @@ export default function App() {
   // ── Landscape / desktop layout: sidebar ──────────────────────────────────────
   return (
     <div style={root}>
+      {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
       {toolbar}
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>

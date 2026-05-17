@@ -40,12 +40,12 @@ const Sep = () => (
 
 // ── MiniKnob ──────────────────────────────────────────────────────────────────
 
-function MiniKnob({ label, value, min, max, onChange, valueWidth = 28, isTouch = false }) {
+function MiniKnob({ label, value, min, max, onChange, valueWidth = 28, isTouch = false, title }) {
   const ab = isTouch
     ? { ...arrowBtn, padding: '7px 10px', fontSize: 13 }
     : arrowBtn;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+    <div title={title} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
       <span style={knobLabel}>{label}</span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
         <button
@@ -99,6 +99,7 @@ export default function Toolbar({
   onSpeedChange,
   onLoopStartChange,
   onLoopEndChange,
+  onHelp,
   isTouch = false,
 }) {
   const activeCount = sfx.notes.filter(n => n.on).length;
@@ -121,13 +122,14 @@ export default function Toolbar({
       }}>
 
         {/* SFX slot selector — displayed as 2-digit hex (00–3F) */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+        <div title="SFX slot (00–3F). Matches pico-8's sfx() index." style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
           <span style={knobLabel}>SFX</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
             <button
               style={{ ...arrowBtn, ...(isTouch && { padding: '7px 10px', fontSize: 13 }), opacity: curSfx <= 0 ? 0.25 : 1 }}
               disabled={curSfx <= 0}
               onClick={onPrev}
+              title="Previous SFX slot"
             >
               ◀
             </button>
@@ -138,6 +140,7 @@ export default function Toolbar({
               style={{ ...arrowBtn, ...(isTouch && { padding: '7px 10px', fontSize: 13 }), opacity: curSfx >= 63 ? 0.25 : 1 }}
               disabled={curSfx >= 63}
               onClick={onNext}
+              title="Next SFX slot"
             >
               ▶
             </button>
@@ -156,6 +159,7 @@ export default function Toolbar({
             onChange={onSpeedChange}
             valueWidth={32}
             isTouch={isTouch}
+            title={`How long each note plays. 1 tick = 1/60 second (currently ${Math.round(sfx.speed / 60 * 1000)} ms per note)`}
           />
           <MiniKnob
             label="LOOP ST"
@@ -164,6 +168,7 @@ export default function Toolbar({
             max={31}
             onChange={onLoopStartChange}
             isTouch={isTouch}
+            title="First note the sequence loops back to. Set both LOOP ST and LOOP EN to 0 to disable looping."
           />
           <MiniKnob
             label="LOOP EN"
@@ -172,6 +177,7 @@ export default function Toolbar({
             max={31}
             onChange={onLoopEndChange}
             isTouch={isTouch}
+            title="Last note before the loop jumps back to LOOP ST. Set both to 0 to disable looping."
           />
         </div>
 
@@ -180,6 +186,7 @@ export default function Toolbar({
         {/* Transport */}
         <button
           onClick={isPlaying ? onStop : onPlay}
+          title={isPlaying ? 'Stop playback (Space)' : 'Play this SFX from the beginning (Space)'}
           style={{
             fontFamily: 'monospace',
             fontSize: isTouch ? 13 : 11,
@@ -201,22 +208,36 @@ export default function Toolbar({
         <div style={{ display: 'flex', gap: 6, marginLeft: 10 }}>
           <button
             onClick={onSave}
+            title="Snapshot the current SFX to your Takes list so you can compare versions or recover it later"
             style={actionBtn({ border: '1px solid #FFEC27', color: '#FFEC27',
               ...(isTouch && { padding: '9px 14px', fontSize: 11 }) })}
           >
             SAVE TAKE
           </button>
 
-          <button onClick={onCopy} style={actionBtn({ ...(isTouch && { padding: '9px 14px', fontSize: 11 }) })}>
+          <button
+            onClick={onCopy}
+            title="Copy this SFX as a pico-8 sfx() line — paste it directly into your cart"
+            style={actionBtn({ ...(isTouch && { padding: '9px 14px', fontSize: 11 }) })}
+          >
             COPY SFX
           </button>
 
           <button
             onClick={onClear}
+            title="Erase all 32 notes in this SFX slot"
             style={actionBtn({ border: '1px solid #FF004D', color: '#FF004D',
               ...(isTouch && { padding: '9px 14px', fontSize: 11 }) })}
           >
             CLEAR
+          </button>
+
+          <button
+            onClick={onHelp}
+            title="Help & keyboard shortcuts"
+            style={actionBtn({ ...(isTouch && { padding: '9px 14px', fontSize: 11 }) })}
+          >
+            ?
           </button>
         </div>
 

@@ -5,6 +5,27 @@ import { audioEngine } from '../audio.js';
 const WAVE_LABELS = ['TRI', 'TSAW', 'SAW', 'SQR', 'PUL', 'ORG', 'NOI', 'PHA'];
 const EFF_LABELS  = ['NON', 'SLD',  'VIB', 'DRP', 'FDI', 'FDO', 'ARP', 'ARS'];
 
+const WAVE_DESCS = [
+  'Triangle — soft, flute-like tone',
+  'Tilted saw — brighter saw with character',
+  'Saw — harsh, buzzy tone',
+  'Square — hollow, reedy tone',
+  'Pulse — thin, nasal tone',
+  'Organ — warm tone with harmonics',
+  'Noise — random, useful for drums and hit SFX',
+  'Phaser — shimmery, metallic chorus',
+];
+const EFF_DESCS = [
+  'None — note plays straight',
+  'Slide — pitch glides from the previous note',
+  'Vibrato — pitch wobbles at ~7 Hz',
+  'Drop — pitch falls over the note duration',
+  'Fade in — volume rises from silence',
+  'Fade out — volume falls to silence',
+  'Arp fast — rapid major-triad arpeggio (~40 ms per step)',
+  'Arp slow — slow major-triad arpeggio (~90 ms per step)',
+];
+
 const PREVIEW_DUR = 0.35; // seconds; effect 0 (none) avoids arp/slide artifacts
 
 // Returns white or black text depending on the background luminance
@@ -189,6 +210,7 @@ export default function NoteEditor({ note, noteIndex, onUpdate, nextPitch = null
             <button
               key={i}
               onClick={() => handleWaveformChange(i)}
+              title={WAVE_DESCS[i]}
               style={selBtn(WAVE_COLS[i], note.waveform === i, isTouch)}
             >
               {lbl}
@@ -205,6 +227,7 @@ export default function NoteEditor({ note, noteIndex, onUpdate, nextPitch = null
             <button
               key={i}
               onClick={() => onUpdate({ effect: i })}
+              title={EFF_DESCS[i]}
               style={selBtn(EFF_COLS[i], note.effect === i, isTouch)}
             >
               {lbl}
@@ -217,6 +240,7 @@ export default function NoteEditor({ note, noteIndex, onUpdate, nextPitch = null
       <div style={{ display: 'flex', justifyContent: 'center' }}>
         <button
           onClick={() => onUpdate({ on: !note.on })}
+          title={note.on ? 'This note plays — click to silence it (rest)' : 'This note is silent — click to turn it on'}
           style={{
             fontFamily: 'monospace',
             fontSize: 12,
