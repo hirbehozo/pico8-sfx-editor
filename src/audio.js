@@ -42,8 +42,12 @@ class AudioEngine {
   }
 
   // prevPitch defaults to pitch so slide has no effect when there is no prior note
-  synthNote(pitch, waveform, volume, effect, duration, prevPitch = pitch) {
+  async synthNote(pitch, waveform, volume, effect, duration, prevPitch = pitch) {
     const ctx = this.getCtx();
+    // Safari creates AudioContext in 'suspended' state even during a user gesture,
+    // and resume() is async. If we read currentTime before the context is running
+    // it returns 0, causing all notes to be scheduled in the past → silence.
+    if (ctx.state !== 'running') await ctx.resume();
     const now = ctx.currentTime;
     const freq = noteToFreq(pitch);
     const targetGain = 0.35 * (volume / 7);
