@@ -294,7 +294,7 @@ export default function App() {
           notes={sfx.notes}
           selectedNote={selectedNote}
           playPos={playPos}
-          onNoteClick={setSelectedNote}
+          onNoteClick={i => { setSelectedNote(i); setTab('edit'); }}
           onDragPaint={(i, on) => updateNote(i, { on })}
         />
       </div>
