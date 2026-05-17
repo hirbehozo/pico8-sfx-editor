@@ -234,7 +234,7 @@ function TabBar({ tab, setTab, bottom = false, isTouch = false }) {
 // ── TabContent shared by both layouts ─────────────────────────────────────────
 function TabContent({ tab, sfx, sfxSlots, curSfx, selectedNote, savedTakes,
                       updateNote, loadTake, deleteTake, patterns, previewTake,
-                      nextPitch, isTouch = false }) {
+                      nextPitch, isTouch = false, onSelectSfx }) {
   return (
     <>
       {tab === 'edit' && (
@@ -266,11 +266,13 @@ function TabContent({ tab, sfx, sfxSlots, curSfx, selectedNote, savedTakes,
           setCurPattern={patterns.setCurPattern}
           isPlaying={patterns.isPlaying}
           playPos={patterns.playPos}
+          notePos={patterns.notePos}
           updateChannel={patterns.updateChannel}
           updateFlags={patterns.updateFlags}
           playPatterns={patterns.playPatterns}
           stopPatternPlay={patterns.stopPatternPlay}
           exportMusic={patterns.exportMusic}
+          onSelectSfx={onSelectSfx}
         />
       )}
     </>
@@ -466,6 +468,7 @@ export default function App() {
       updateNote={updateNote} loadTake={loadTake} deleteTake={deleteTake}
       patterns={patterns} previewTake={previewTake}
       nextPitch={nextPitch} isTouch={vp.isTouch}
+      onSelectSfx={idx => { setCurSfx(idx); setTab('edit'); }}
     />
   );
 

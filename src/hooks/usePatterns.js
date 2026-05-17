@@ -70,6 +70,7 @@ export function usePatterns(sfxSlots) {
   const [curPattern, setCurPattern] = useState(0);
   const [isPlaying,  setIsPlaying]  = useState(false);
   const [playPos,    setPlayPos]    = useState(-1);
+  const [notePos,    setNotePos]    = useState(-1); // 0-31 within current pattern
 
   // Stable refs — callbacks never re-register because they read through these
   const patternsRef   = useRef(patterns);
@@ -125,6 +126,7 @@ export function usePatterns(sfxSlots) {
     audioEngine.stopAll();
     setIsPlaying(false);
     setPlayPos(-1);
+    setNotePos(-1);
   }, []);
 
   const playPatterns = useCallback((startIdx) => {
@@ -156,14 +158,24 @@ export function usePatterns(sfxSlots) {
       for (const sfxIdx of pat.channels) {
         if (sfxIdx !== null && sfxSlots[sfxIdx]) { speed = sfxSlots[sfxIdx].speed; break; }
       }
-      const patMs = Math.round(32 * speed / 60 * 1000);
-      const atMs  = delayMs;
+      const noteDurMs = Math.round(speed / 60 * 1000);
+      const patMs     = noteDurMs * 32;
+      const atMs      = delayMs;
+
+      // Note-position ticker: fires once per note step so the UI progress bar updates
+      for (let ni = 0; ni < 32; ni++) {
+        const ni_ = ni;
+        ids.push(setTimeout(() => {
+          if (stopRef.current) return;
+          setNotePos(ni_);
+        }, atMs + ni_ * noteDurMs));
+      }
 
       const patId = setTimeout(() => {
         if (stopRef.current) return;
         setPlayPos(patIdx);
 
-        // Schedule every note of every active channel
+        // Schedule every note of every active channel simultaneously
         pat.channels.forEach(sfxIdx => {
           if (sfxIdx === null) return;
           const sfx = sfxSlots[sfxIdx];
@@ -194,6 +206,7 @@ export function usePatterns(sfxSlots) {
       audioEngine.stopAll();
       setIsPlaying(false);
       setPlayPos(-1);
+      setNotePos(-1);
     }, delayMs));
   }, []);
 
@@ -205,7 +218,7 @@ export function usePatterns(sfxSlots) {
 
   return {
     patterns, curPattern, setCurPattern,
-    isPlaying, playPos,
+    isPlaying, playPos, notePos,
     updateChannel, updateFlags,
     playPatterns, stopPatternPlay,
     exportMusic,
