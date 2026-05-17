@@ -172,10 +172,13 @@ export function usePatterns(sfxSlots) {
     for (const patIdx of seq) {
       const pat = pats[patIdx];
 
-      // Use the first active channel's SFX speed for pattern duration
+      // Use the first active channel's SFX speed for pattern duration.
+      // Null channel → fall back to SFX index = channel index (0–3),
+      // mirroring the effectiveChannels logic in the NoteGrid display.
       let speed = 16;
-      for (const sfxIdx of pat.channels) {
-        if (sfxIdx !== null && sfxSlots[sfxIdx]) { speed = sfxSlots[sfxIdx].speed; break; }
+      for (let ci = 0; ci < pat.channels.length; ci++) {
+        const sfx = sfxSlots[pat.channels[ci] ?? ci];
+        if (sfx) { speed = sfx.speed; break; }
       }
       const noteDurMs = Math.round(speed / 60 * 1000);
       const patMs     = noteDurMs * 32;
@@ -198,8 +201,7 @@ export function usePatterns(sfxSlots) {
         // muteCheckRef lets mute/solo changes take effect on the next note,
         // even mid-playback, without re-scheduling the entire sequence.
         pat.channels.forEach((sfxIdx, ci) => {
-          if (sfxIdx === null) return;
-          const sfx = sfxSlots[sfxIdx];
+          const sfx = sfxSlots[sfxIdx ?? ci]; // null → SFX ci, matches NoteGrid display
           if (!sfx) return;
           const noteDur = sfx.speed / 60;
 
