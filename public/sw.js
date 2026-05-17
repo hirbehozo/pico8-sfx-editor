@@ -50,7 +50,10 @@ self.addEventListener('fetch', evt => {
       caches.match(evt.request).then(cached => {
         if (cached) return cached;
         return fetch(evt.request).then(res => {
-          if (res.ok) caches.open(CACHE_NAME).then(c => c.put(evt.request, res.clone()));
+          if (res.ok) {
+            const clone = res.clone(); // clone before any async gap
+            caches.open(CACHE_NAME).then(c => c.put(evt.request, clone));
+          }
           return res;
         });
       }),
@@ -64,7 +67,10 @@ self.addEventListener('fetch', evt => {
   evt.respondWith(
     fetch(evt.request)
       .then(res => {
-        if (res.ok) caches.open(CACHE_NAME).then(c => c.put(evt.request, res.clone()));
+        if (res.ok) {
+          const clone = res.clone(); // clone before any async gap
+          caches.open(CACHE_NAME).then(c => c.put(evt.request, clone));
+        }
         return res;
       })
       .catch(() =>
