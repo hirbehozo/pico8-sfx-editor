@@ -100,6 +100,7 @@ export default function Toolbar({
   onLoopStartChange,
   onLoopEndChange,
   onHelp,
+  midiStatus = 'pending',
   isTouch = false,
 }) {
   const activeCount = sfx.notes.filter(n => n.on).length;
@@ -239,6 +240,37 @@ export default function Toolbar({
           >
             ?
           </button>
+        </div>
+
+        {/* MIDI status indicator */}
+        <div
+          title={
+            midiStatus === 'ready'       ? 'MIDI device connected' :
+            midiStatus === 'denied'      ? 'MIDI access denied — check browser permissions' :
+            midiStatus === 'unsupported' ? 'Web MIDI not supported in this browser' :
+                                           'No MIDI device detected'
+          }
+          style={{
+            marginLeft: 'auto', display: 'flex', alignItems: 'center',
+            gap: 5, paddingLeft: 14, flexShrink: 0,
+          }}
+        >
+          <div style={{
+            width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+            backgroundColor:
+              midiStatus === 'ready'  ? '#00E436' :
+              midiStatus === 'denied' ? '#FF004D' : '#2a2a2a',
+            boxShadow: midiStatus === 'ready' ? '0 0 6px #00E43666' : 'none',
+          }} />
+          <span style={{
+            fontFamily: 'monospace', letterSpacing: 0.5,
+            fontSize: isTouch ? 11 : 9,
+            color:
+              midiStatus === 'ready'  ? '#00E436' :
+              midiStatus === 'denied' ? '#FF004D' : '#3a3a3a',
+          }}>
+            MIDI
+          </span>
         </div>
 
       </div>

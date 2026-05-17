@@ -19,6 +19,122 @@ import ExportPanel     from './components/ExportPanel.jsx';
 import PatternEditor   from './components/PatternEditor.jsx';
 import HelpModal       from './components/HelpModal.jsx';
 
+// ── Scale preference persistence (30-day TTL) ────────────────────────────────
+const SCALE_PREFS_KEY = 'p8-scale-prefs';
+function loadScalePrefs() {
+  try {
+    const p = JSON.parse(localStorage.getItem(SCALE_PREFS_KEY) ?? 'null');
+    if (!p || Date.now() > p.exp) return null;
+    return p;
+  } catch { return null; }
+}
+function saveScalePrefs(key, mode) {
+  try {
+    localStorage.setItem(SCALE_PREFS_KEY, JSON.stringify({
+      key, mode, exp: Date.now() + 30 * 24 * 60 * 60 * 1000,
+    }));
+  } catch {}
+}
+
+// ── First-interaction tracking ────────────────────────────────────────────────
+const INTERACTED_KEY = 'p8-interacted';
+function loadInteracted() {
+  try { return localStorage.getItem(INTERACTED_KEY) === '1'; } catch { return false; }
+}
+
+// ── Rotating tips shown after first interaction ───────────────────────────────
+const TIPS = [
+  'Drag across the grid to paint or erase multiple notes at once.',
+  'Shift + ↑↓ raises or lowers the selected note\'s volume.',
+  'Set a Key and Mode — the piano and keyboard snap to your scale.',
+  'Save a Take before experimenting so you can always go back.',
+  'COPY SFX puts a ready-to-paste pico-8 sfx() line on your clipboard.',
+  '[ and ] shift the keyboard octave down or up.',
+  'Slide effect glides pitch smoothly from the previous note.',
+  'Set Loop Start and Loop End to loop a section of your SFX.',
+  'Press 1–8 to instantly set the waveform on the selected note.',
+  'Tab cycles through waveforms; Del silences the current note.',
+  'The PATTERNS tab arranges SFX slots into background music.',
+  'MIDI keyboard connected? It inputs notes directly into the grid.',
+];
+
+// ── Keyboard-key badge ────────────────────────────────────────────────────────
+function Kbd({ children }) {
+  return (
+    <span style={{
+      display: 'inline-block', fontFamily: 'monospace', fontSize: 10,
+      color: '#C2C3C7', background: '#1c1c1c',
+      border: '1px solid #333', borderBottom: '2px solid #111',
+      borderRadius: 3, padding: '1px 6px', lineHeight: '16px',
+      userSelect: 'none',
+    }}>
+      {children}
+    </span>
+  );
+}
+
+// ── Welcome / Tips panel ──────────────────────────────────────────────────────
+// Before first interaction: plain-English guide + keyboard shortcuts.
+// After first interaction: rotating tips only.
+function WelcomeTips({ hasInteracted, octave }) {
+  const [tipIdx, setTipIdx] = useState(0);
+  useEffect(() => {
+    if (!hasInteracted) return;
+    const id = setInterval(() => setTipIdx(i => (i + 1) % TIPS.length), 7000);
+    return () => clearInterval(id);
+  }, [hasInteracted]);
+
+  const base = {
+    borderTop: '1px solid #1c1c1c', backgroundColor: '#0a0a0a',
+    fontFamily: 'monospace', userSelect: 'none', flexShrink: 0, marginTop: 'auto',
+  };
+
+  if (!hasInteracted) {
+    return (
+      <div style={{ ...base, padding: '14px 16px 12px' }}>
+        <div style={{ fontSize: 8, color: '#83769C', letterSpacing: 2, marginBottom: 12 }}>
+          HOW TO USE
+        </div>
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'max-content 1fr',
+          gap: '5px 14px', marginBottom: 14, fontSize: 10,
+        }}>
+          <span style={{ color: '#FFEC27' }}>Paint notes</span>
+          <span style={{ color: '#5F574F' }}>click or drag across the grid to turn notes on</span>
+          <span style={{ color: '#FFEC27' }}>Edit a note</span>
+          <span style={{ color: '#5F574F' }}>click any colored bar — EDIT panel opens on the right</span>
+          <span style={{ color: '#FFEC27' }}>Play</span>
+          <span style={{ color: '#5F574F' }}>press the green PLAY button (or Space) to hear it</span>
+          <span style={{ color: '#FFEC27' }}>Export</span>
+          <span style={{ color: '#5F574F' }}>COPY SFX puts a pico-8 sfx() line on your clipboard</span>
+        </div>
+        <div style={{
+          borderTop: '1px solid #181818', paddingTop: 10,
+          display: 'flex', flexWrap: 'wrap', gap: '5px 8px',
+          alignItems: 'center', fontSize: 10, color: '#4a4a4a', lineHeight: 2,
+        }}>
+          <Kbd>Space</Kbd> play
+          {' · '}<Kbd>← →</Kbd> navigate
+          {' · '}<Kbd>↑ ↓</Kbd> pitch
+          {' · '}<Kbd>⇧↑↓</Kbd> volume
+          {' · '}<Kbd>Del</Kbd> silence
+          {' · '}<Kbd>Tab</Kbd> waveform
+          {' · '}<Kbd>1–8</Kbd> set wave
+          {' · '}<Kbd>[ ]</Kbd> oct {octave}
+          {' · '}<Kbd>Q–P</Kbd> piano
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ ...base, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+      <span style={{ fontSize: 8, color: '#29ADFF', letterSpacing: 2, flexShrink: 0 }}>TIP</span>
+      <span style={{ fontSize: 10, color: '#5F574F', lineHeight: 1.5 }}>{TIPS[tipIdx]}</span>
+    </div>
+  );
+}
+
 const TABS = [
   { id: 'edit',     label: 'EDIT',     title: 'Edit the selected note — pitch, waveform, volume and effect' },
   { id: 'takes',    label: 'TAKES',    title: 'Saved snapshots of your SFX for comparison and recovery' },
@@ -167,9 +283,20 @@ export default function App() {
   const [showHelp, setShowHelp] = useState(false);
   const vp = useViewport();
 
-  // ── Scale / mode ────────────────────────────────────────────────────────────
-  const [scaleKey,  setScaleKey]  = useState(0);           // 0 = C
-  const [scaleMode, setScaleMode] = useState('chromatic');
+  // ── Interaction tracking ─────────────────────────────────────────────────────
+  const [hasInteracted, setHasInteracted] = useState(loadInteracted);
+  const markInteracted = useCallback(() => {
+    setHasInteracted(was => {
+      if (was) return was;
+      try { localStorage.setItem(INTERACTED_KEY, '1'); } catch {}
+      return true;
+    });
+  }, []);
+
+  // ── Scale / mode ─────────────────────────────────────────────────────────────
+  // Default is minor. User's last choice is remembered for 30 days.
+  const [scaleKey,  setScaleKey]  = useState(() => loadScalePrefs()?.key  ?? 0);
+  const [scaleMode, setScaleMode] = useState(() => loadScalePrefs()?.mode ?? 'minor');
   const validNotes = buildScaleNotes(scaleKey, scaleMode); // Set<0-11>
 
   // Scale helper callbacks — passed to useKeyboard, NoteEditor, PianoKeyboard
@@ -199,6 +326,17 @@ export default function App() {
     document.addEventListener('pointerdown', prime, { once: true });
     return () => document.removeEventListener('pointerdown', prime);
   }, []);
+
+  // ── Mark interaction on first keydown or pointerdown ─────────────────────────
+  useEffect(() => {
+    const fn = () => markInteracted();
+    window.addEventListener('keydown',    fn, { once: true });
+    window.addEventListener('pointerdown', fn, { once: true });
+    return () => {
+      window.removeEventListener('keydown',    fn);
+      window.removeEventListener('pointerdown', fn);
+    };
+  }, [markInteracted]);
 
   // ── Keyboard shortcuts ──────────────────────────────────────────────────────
   const { octave } = useKeyboard({
@@ -254,22 +392,26 @@ export default function App() {
 
   // ── Piano key press ─────────────────────────────────────────────────────────
   const handlePianoKey = useCallback(pitch => {
+    markInteracted();
     const idx     = selRef.current;
     const n       = noteRef.current;
     const snapped = snapRef.current(pitch);    // snap to active scale
     updateNote(idx, { pitch: snapped, on: true });
     audioEngine.synthNote(snapped, n.waveform, n.volume || 5, 0, 0.3);
     setSelectedNote(prev => Math.min(prev + 1, 31));
-  }, [updateNote, setSelectedNote]);
+  }, [updateNote, setSelectedNote, markInteracted]);
+
+  const handlePlay = useCallback(() => { markInteracted(); playSfx(); }, [playSfx, markInteracted]);
 
   // ── Shared toolbar ──────────────────────────────────────────────────────────
   const toolbar = (
     <Toolbar
       curSfx={curSfx}  sfx={sfx}  isPlaying={isPlaying}  isTouch={vp.isTouch}
       onHelp={() => setShowHelp(true)}
+      midiStatus={midiStatus}
       onPrev={() => setCurSfx(Math.max(0, curSfx - 1))}
       onNext={() => setCurSfx(Math.min(63, curSfx + 1))}
-      onPlay={playSfx}  onStop={stopPlay}
+      onPlay={handlePlay}  onStop={stopPlay}
       onSave={saveTake}  onCopy={handleCopy}  onClear={handleClear}
       onSpeedChange={v => updateSfxField({ speed: v })}
       onLoopStartChange={v => updateSfxField({ loopStart: v })}
@@ -285,8 +427,8 @@ export default function App() {
         scaleKey={scaleKey}
         scaleMode={scaleMode}
         validNotes={validNotes}
-        onKeyChange={setScaleKey}
-        onModeChange={setScaleMode}
+        onKeyChange={k  => { setScaleKey(k);  saveScalePrefs(k, scaleMode); }}
+        onModeChange={m => { setScaleMode(m); saveScalePrefs(scaleKey, m); }}
         isTouch={vp.isTouch}
       />
 
@@ -349,24 +491,7 @@ export default function App() {
                       overflow: 'hidden' }}>
           {editingColumn}
 
-          {/* Keyboard shortcut hint — only useful if a keyboard is attached */}
-          {!vp.isTouch && (
-            <div style={{ padding: '8px 14px', fontSize: 8, color: '#2a2a2a',
-                          lineHeight: 2, userSelect: 'none', marginTop: 'auto' }}>
-              <span style={{ color: '#3a3a3a' }}>SPACE</span> play ·{' '}
-              <span style={{ color: '#3a3a3a' }}>← →</span> select ·{' '}
-              <span style={{ color: '#3a3a3a' }}>↑↓</span> pitch ·{' '}
-              <span style={{ color: '#3a3a3a' }}>⇧↑↓</span> vol ·{' '}
-              <span style={{ color: '#3a3a3a' }}>DEL</span> off ·{' '}
-              <span style={{ color: '#3a3a3a' }}>TAB</span> wave ·{' '}
-              <span style={{ color: '#3a3a3a' }}>1–8</span> waveform ·{' '}
-              <span style={{ color: '#3a3a3a' }}>[ ]</span> oct {octave} ·{' '}
-              <span style={{ color: '#3a3a3a' }}>Q–P / Z–M</span> piano
-              {midiStatus === 'ready' && (
-                <span style={{ color: '#00E436', marginLeft: 8 }}>● MIDI</span>
-              )}
-            </div>
-          )}
+          {!vp.isTouch && <WelcomeTips hasInteracted={hasInteracted} octave={octave} />}
         </div>
 
         {/* Right sidebar */}
