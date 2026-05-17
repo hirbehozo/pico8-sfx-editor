@@ -6,8 +6,9 @@ const WHITE_IDX = { 0:0, 2:1, 4:2, 5:3, 7:4, 9:5, 11:6 };
 const BLACK_OFF = { 1:0.65, 3:1.65, 6:3.65, 8:4.65, 10:5.65 };
 
 // keyW / keyH let the caller scale keys for touch (default = desktop size)
+// fillWidth: clips overflow instead of scrolling — use when piano spans full viewport width
 // validNotes: Set<0-11> of in-scale chromatic indices, or null for chromatic (no dim)
-export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH = 64, validNotes = null }) {
+export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH = 64, validNotes = null, fillWidth = false }) {
   const blackW = Math.round(keyW * 0.6);
   const blackH = Math.round(keyH * 0.62);
 
@@ -45,7 +46,7 @@ export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH
   };
 
   return (
-    <div style={{ overflowX: 'auto', overflowY: 'hidden', userSelect: 'none', WebkitUserSelect: 'none' }}>
+    <div style={{ overflowX: fillWidth ? 'hidden' : 'auto', overflowY: 'hidden', userSelect: 'none', WebkitUserSelect: 'none' }}>
       <div style={{ position: 'relative', width: containerW, height: keyH }}>
 
         {/* White keys ─────────────────────────────────────────────────────── */}

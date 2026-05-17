@@ -29,7 +29,10 @@ const arrowBtn = {
   cursor: 'pointer',
 };
 
-function Knob({ label, value, min, max, onChange }) {
+function Knob({ label, value, min, max, onChange, isTouch = false }) {
+  const ab = isTouch
+    ? { ...arrowBtn, padding: '10px 14px', fontSize: 14 }
+    : arrowBtn;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
       <span style={{
@@ -42,7 +45,7 @@ function Knob({ label, value, min, max, onChange }) {
       </span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <button
-          style={{ ...arrowBtn, opacity: value <= min ? 0.25 : 1 }}
+          style={{ ...ab, opacity: value <= min ? 0.25 : 1 }}
           disabled={value <= min}
           onClick={() => onChange(Math.max(min, value - 1))}
         >
@@ -59,7 +62,7 @@ function Knob({ label, value, min, max, onChange }) {
           {value}
         </span>
         <button
-          style={{ ...arrowBtn, opacity: value >= max ? 0.25 : 1 }}
+          style={{ ...ab, opacity: value >= max ? 0.25 : 1 }}
           disabled={value >= max}
           onClick={() => onChange(Math.min(max, value + 1))}
         >
@@ -80,10 +83,10 @@ const sectionHead = {
   marginBottom: 4,
 };
 
-const selBtn = (color, active) => ({
+const selBtn = (color, active, isTouch = false) => ({
   fontFamily: 'monospace',
   fontSize: 9,
-  padding: '4px 0',
+  padding: isTouch ? '10px 0' : '4px 0',
   width: 40,
   cursor: 'pointer',
   borderRadius: 2,
@@ -102,7 +105,7 @@ const wrap = {
   backgroundColor: '#0d0d0d',
 };
 
-export default function NoteEditor({ note, noteIndex, onUpdate, nextPitch = null }) {
+export default function NoteEditor({ note, noteIndex, onUpdate, nextPitch = null, isTouch = false }) {
   if (noteIndex == null || !note) {
     return (
       <div style={{
@@ -166,6 +169,7 @@ export default function NoteEditor({ note, noteIndex, onUpdate, nextPitch = null
           min={0}
           max={63}
           onChange={handlePitchChange}
+          isTouch={isTouch}
         />
         <Knob
           label="VOL"
@@ -173,6 +177,7 @@ export default function NoteEditor({ note, noteIndex, onUpdate, nextPitch = null
           min={0}
           max={7}
           onChange={(volume) => onUpdate({ volume })}
+          isTouch={isTouch}
         />
       </div>
 
@@ -184,7 +189,7 @@ export default function NoteEditor({ note, noteIndex, onUpdate, nextPitch = null
             <button
               key={i}
               onClick={() => handleWaveformChange(i)}
-              style={selBtn(WAVE_COLS[i], note.waveform === i)}
+              style={selBtn(WAVE_COLS[i], note.waveform === i, isTouch)}
             >
               {lbl}
             </button>
@@ -200,7 +205,7 @@ export default function NoteEditor({ note, noteIndex, onUpdate, nextPitch = null
             <button
               key={i}
               onClick={() => onUpdate({ effect: i })}
-              style={selBtn(EFF_COLS[i], note.effect === i)}
+              style={selBtn(EFF_COLS[i], note.effect === i, isTouch)}
             >
               {lbl}
             </button>
@@ -217,7 +222,7 @@ export default function NoteEditor({ note, noteIndex, onUpdate, nextPitch = null
             fontSize: 12,
             fontWeight: 'bold',
             letterSpacing: 3,
-            padding: '7px 28px',
+            padding: isTouch ? '12px 36px' : '7px 28px',
             border: 'none',
             borderRadius: 3,
             cursor: 'pointer',

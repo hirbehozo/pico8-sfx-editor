@@ -79,7 +79,7 @@ function RotatePrompt() {
 }
 
 // ── TabBar shared by both layouts ─────────────────────────────────────────────
-function TabBar({ tab, setTab, bottom = false }) {
+function TabBar({ tab, setTab, bottom = false, isTouch = false }) {
   return (
     <div style={{
       display: 'flex',
@@ -95,9 +95,9 @@ function TabBar({ tab, setTab, bottom = false }) {
           style={{
             flex: 1,
             fontFamily: 'monospace',
-            fontSize: 9,
+            fontSize: isTouch ? 11 : 9,
             letterSpacing: 1,
-            padding: '10px 0',  // 44 px touch target height
+            padding: isTouch ? '14px 0' : '10px 0',
             border: 'none',
             borderTop:    bottom && tab === id ? '2px solid #29ADFF' : bottom ? '2px solid transparent' : 'none',
             borderBottom: !bottom && tab === id ? '2px solid #29ADFF' : !bottom ? '2px solid transparent' : 'none',
@@ -116,7 +116,7 @@ function TabBar({ tab, setTab, bottom = false }) {
 // ── TabContent shared by both layouts ─────────────────────────────────────────
 function TabContent({ tab, sfx, sfxSlots, curSfx, selectedNote, savedTakes,
                       updateNote, loadTake, deleteTake, patterns, previewTake,
-                      nextPitch }) {
+                      nextPitch, isTouch = false }) {
   return (
     <>
       {tab === 'edit' && (
@@ -125,6 +125,7 @@ function TabContent({ tab, sfx, sfxSlots, curSfx, selectedNote, savedTakes,
           noteIndex={selectedNote}
           onUpdate={patch => updateNote(selectedNote, patch)}
           nextPitch={nextPitch}
+          isTouch={isTouch}
         />
       )}
       {tab === 'takes' && (
@@ -134,6 +135,7 @@ function TabContent({ tab, sfx, sfxSlots, curSfx, selectedNote, savedTakes,
           onLoad={loadTake}
           onDelete={deleteTake}
           onPreview={previewTake}
+          isTouch={isTouch}
         />
       )}
       {tab === 'export' && (
@@ -171,9 +173,10 @@ export default function App() {
   const snapPitch  = p => snapToScale(p, validNotes);
   const nextPitch  = (p, dir) => nextScalePitch(p, dir, validNotes);
 
-  // Piano key sizes — larger on touch devices for comfortable tapping
-  const keyW = vp.isTouch ? 30 : 22;
-  const keyH = vp.isTouch ? 76 : 64;
+  // Piano key sizing: on touch, fill the full viewport width across all 37 white keys
+  // containerW ≈ 37.25 × keyW, so keyW = floor(vp.w / 37.25) fills edge-to-edge
+  const pianoKeyW = vp.isTouch ? Math.max(18, Math.floor(vp.w / 37.25)) : 22;
+  const pianoKeyH = vp.isTouch ? 80 : 64;
 
   // ── SFX state ───────────────────────────────────────────────────────────────
   const {
@@ -259,7 +262,7 @@ export default function App() {
   // ── Shared toolbar ──────────────────────────────────────────────────────────
   const toolbar = (
     <Toolbar
-      curSfx={curSfx}  sfx={sfx}  isPlaying={isPlaying}
+      curSfx={curSfx}  sfx={sfx}  isPlaying={isPlaying}  isTouch={vp.isTouch}
       onPrev={() => setCurSfx(Math.max(0, curSfx - 1))}
       onNext={() => setCurSfx(Math.min(63, curSfx + 1))}
       onPlay={playSfx}  onStop={stopPlay}
@@ -280,6 +283,7 @@ export default function App() {
         validNotes={validNotes}
         onKeyChange={setScaleKey}
         onModeChange={setScaleMode}
+        isTouch={vp.isTouch}
       />
 
       <div style={{ padding: '8px 12px', borderBottom: '1px solid #1c1c1c', flexShrink: 0 }}>
@@ -294,15 +298,18 @@ export default function App() {
           onDragPaint={(i, on) => updateNote(i, { on })}
         />
       </div>
-      <div style={{ padding: '8px 12px', flexShrink: 0 }}>
-        <PianoKeyboard
-          activePitch={note.pitch}
-          onKeyPress={handlePianoKey}
-          keyW={keyW}
-          keyH={keyH}
-          validNotes={validNotes}
-        />
-      </div>
+      {/* Desktop piano — touch devices get the full-width strip at the bottom instead */}
+      {!vp.isTouch && (
+        <div style={{ padding: '8px 12px', flexShrink: 0 }}>
+          <PianoKeyboard
+            activePitch={note.pitch}
+            onKeyPress={handlePianoKey}
+            keyW={22}
+            keyH={64}
+            validNotes={validNotes}
+          />
+        </div>
+      )}
     </>
   );
 
@@ -312,7 +319,7 @@ export default function App() {
       selectedNote={selectedNote} savedTakes={savedTakes}
       updateNote={updateNote} loadTake={loadTake} deleteTake={deleteTake}
       patterns={patterns} previewTake={previewTake}
-      nextPitch={nextPitch}
+      nextPitch={nextPitch} isTouch={vp.isTouch}
     />
   );
 
@@ -360,12 +367,26 @@ export default function App() {
         {/* Right sidebar */}
         <div style={{ width: 370, flexShrink: 0, borderLeft: '1px solid #1c1c1c',
                       display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <TabBar tab={tab} setTab={setTab} />
+          <TabBar tab={tab} setTab={setTab} isTouch={vp.isTouch} />
           <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
             {tabContent}
           </div>
         </div>
       </div>
+
+      {/* Full-width piano strip — touch landscape only */}
+      {vp.isTouch && (
+        <div style={{ flexShrink: 0, borderTop: '1px solid #1c1c1c', backgroundColor: '#0d0d0d' }}>
+          <PianoKeyboard
+            activePitch={note.pitch}
+            onKeyPress={handlePianoKey}
+            keyW={pianoKeyW}
+            keyH={pianoKeyH}
+            validNotes={validNotes}
+            fillWidth
+          />
+        </div>
+      )}
     </div>
   );
 }

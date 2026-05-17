@@ -21,7 +21,7 @@ function formatTime(iso) {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function Btn({ children, onClick, title, variant = 'neutral' }) {
+function Btn({ children, onClick, title, variant = 'neutral', isTouch = false }) {
   const colors = {
     neutral: { border: '#3a3a3a', color: '#C2C3C7' },
     accent:  { border: '#29ADFF', color: '#29ADFF' },
@@ -37,8 +37,8 @@ function Btn({ children, onClick, title, variant = 'neutral' }) {
       title={title}
       style={{
         fontFamily: 'monospace',
-        fontSize: 9,
-        padding: '3px 7px',
+        fontSize: isTouch ? 12 : 9,
+        padding: isTouch ? '9px 12px' : '3px 7px',
         borderRadius: 2,
         cursor: 'pointer',
         background: 'none',
@@ -53,7 +53,7 @@ function Btn({ children, onClick, title, variant = 'neutral' }) {
   );
 }
 
-function TakeRow({ take, index, isCurrent, onLoad, onDelete, onPreview }) {
+function TakeRow({ take, index, isCurrent, onLoad, onDelete, onPreview, isTouch = false }) {
   const [copied, setCopied] = useState(false);
 
   const count = activeNotes(take.sfx);
@@ -130,37 +130,10 @@ function TakeRow({ take, index, isCurrent, onLoad, onDelete, onPreview }) {
 
       {/* Actions */}
       <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-        <Btn
-          onClick={() => onPreview(take)}
-          title="Preview without loading"
-          variant="accent"
-        >
-          ▶
-        </Btn>
-
-        <Btn
-          onClick={() => onLoad(take)}
-          title="Load into current SFX slot"
-          variant="green"
-        >
-          LOAD
-        </Btn>
-
-        <Btn
-          onClick={handleCopy}
-          title="Copy PICO-8 SFX line to clipboard"
-          variant={copied ? 'yellow' : 'neutral'}
-        >
-          {copied ? '✓' : '⎘'}
-        </Btn>
-
-        <Btn
-          onClick={handleDelete}
-          title="Delete take"
-          variant="red"
-        >
-          ✕
-        </Btn>
+        <Btn onClick={() => onPreview(take)} title="Preview without loading" variant="accent" isTouch={isTouch}>▶</Btn>
+        <Btn onClick={() => onLoad(take)} title="Load into current SFX slot" variant="green" isTouch={isTouch}>LOAD</Btn>
+        <Btn onClick={handleCopy} title="Copy PICO-8 SFX line to clipboard" variant={copied ? 'yellow' : 'neutral'} isTouch={isTouch}>{copied ? '✓' : '⎘'}</Btn>
+        <Btn onClick={handleDelete} title="Delete take" variant="red" isTouch={isTouch}>✕</Btn>
       </div>
     </div>
   );
@@ -195,7 +168,7 @@ function EmptyState() {
 
 // ── TakesList ─────────────────────────────────────────────────────────────────
 
-export default function TakesList({ takes, curSfx, onLoad, onDelete, onPreview }) {
+export default function TakesList({ takes, curSfx, onLoad, onDelete, onPreview, isTouch = false }) {
   return (
     <div style={{ backgroundColor: '#0d0d0d' }}>
 
@@ -242,6 +215,7 @@ export default function TakesList({ takes, curSfx, onLoad, onDelete, onPreview }
               onLoad={onLoad}
               onDelete={onDelete}
               onPreview={onPreview}
+              isTouch={isTouch}
             />
           ))
         )}

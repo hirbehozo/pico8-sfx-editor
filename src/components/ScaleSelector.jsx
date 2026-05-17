@@ -14,8 +14,9 @@ const sel = {
   outline: 'none',
 };
 
-export default function ScaleSelector({ scaleKey, scaleMode, onKeyChange, onModeChange, validNotes }) {
+export default function ScaleSelector({ scaleKey, scaleMode, onKeyChange, onModeChange, validNotes, isTouch = false }) {
   const isChromatic = scaleMode === 'chromatic';
+  const selTouch = isTouch ? { ...sel, minHeight: 36, fontSize: 13, padding: '6px 8px' } : sel;
 
   return (
     <div style={{
@@ -36,7 +37,7 @@ export default function ScaleSelector({ scaleKey, scaleMode, onKeyChange, onMode
         <select
           value={scaleKey}
           onChange={e => onKeyChange(parseInt(e.target.value, 10))}
-          style={sel}
+          style={selTouch}
         >
           {KEY_NAMES.map((name, i) => (
             <option key={i} value={i}>{name}</option>
@@ -52,7 +53,7 @@ export default function ScaleSelector({ scaleKey, scaleMode, onKeyChange, onMode
         <select
           value={scaleMode}
           onChange={e => onModeChange(e.target.value)}
-          style={sel}
+          style={selTouch}
         >
           {Object.entries(MODE_LABELS).map(([id, label]) => (
             <option key={id} value={id}>{label}</option>

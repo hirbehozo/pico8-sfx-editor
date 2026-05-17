@@ -40,13 +40,16 @@ const Sep = () => (
 
 // ── MiniKnob ──────────────────────────────────────────────────────────────────
 
-function MiniKnob({ label, value, min, max, onChange, valueWidth = 28 }) {
+function MiniKnob({ label, value, min, max, onChange, valueWidth = 28, isTouch = false }) {
+  const ab = isTouch
+    ? { ...arrowBtn, padding: '7px 10px', fontSize: 13 }
+    : arrowBtn;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
       <span style={knobLabel}>{label}</span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
         <button
-          style={{ ...arrowBtn, opacity: value <= min ? 0.25 : 1 }}
+          style={{ ...ab, opacity: value <= min ? 0.25 : 1 }}
           disabled={value <= min}
           onClick={() => onChange(Math.max(min, value - 1))}
         >
@@ -54,7 +57,7 @@ function MiniKnob({ label, value, min, max, onChange, valueWidth = 28 }) {
         </button>
         <span style={{ ...knobValue, minWidth: valueWidth }}>{value}</span>
         <button
-          style={{ ...arrowBtn, opacity: value >= max ? 0.25 : 1 }}
+          style={{ ...ab, opacity: value >= max ? 0.25 : 1 }}
           disabled={value >= max}
           onClick={() => onChange(Math.min(max, value + 1))}
         >
@@ -96,6 +99,7 @@ export default function Toolbar({
   onSpeedChange,
   onLoopStartChange,
   onLoopEndChange,
+  isTouch = false,
 }) {
   const activeCount = sfx.notes.filter(n => n.on).length;
   const msPerNote   = Math.round((sfx.speed / 60) * 1000);
@@ -121,7 +125,7 @@ export default function Toolbar({
           <span style={knobLabel}>SFX</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
             <button
-              style={{ ...arrowBtn, opacity: curSfx <= 0 ? 0.25 : 1 }}
+              style={{ ...arrowBtn, ...(isTouch && { padding: '7px 10px', fontSize: 13 }), opacity: curSfx <= 0 ? 0.25 : 1 }}
               disabled={curSfx <= 0}
               onClick={onPrev}
             >
@@ -131,7 +135,7 @@ export default function Toolbar({
               {curSfx.toString(16).padStart(2, '0').toUpperCase()}
             </span>
             <button
-              style={{ ...arrowBtn, opacity: curSfx >= 63 ? 0.25 : 1 }}
+              style={{ ...arrowBtn, ...(isTouch && { padding: '7px 10px', fontSize: 13 }), opacity: curSfx >= 63 ? 0.25 : 1 }}
               disabled={curSfx >= 63}
               onClick={onNext}
             >
@@ -151,6 +155,7 @@ export default function Toolbar({
             max={255}
             onChange={onSpeedChange}
             valueWidth={32}
+            isTouch={isTouch}
           />
           <MiniKnob
             label="LOOP ST"
@@ -158,6 +163,7 @@ export default function Toolbar({
             min={0}
             max={31}
             onChange={onLoopStartChange}
+            isTouch={isTouch}
           />
           <MiniKnob
             label="LOOP EN"
@@ -165,6 +171,7 @@ export default function Toolbar({
             min={0}
             max={31}
             onChange={onLoopEndChange}
+            isTouch={isTouch}
           />
         </div>
 
@@ -175,10 +182,10 @@ export default function Toolbar({
           onClick={isPlaying ? onStop : onPlay}
           style={{
             fontFamily: 'monospace',
-            fontSize: 11,
+            fontSize: isTouch ? 13 : 11,
             fontWeight: 'bold',
             letterSpacing: 1,
-            padding: '5px 16px',
+            padding: isTouch ? '9px 20px' : '5px 16px',
             border: 'none',
             borderRadius: 3,
             cursor: 'pointer',
@@ -194,18 +201,20 @@ export default function Toolbar({
         <div style={{ display: 'flex', gap: 6, marginLeft: 10 }}>
           <button
             onClick={onSave}
-            style={actionBtn({ border: '1px solid #FFEC27', color: '#FFEC27' })}
+            style={actionBtn({ border: '1px solid #FFEC27', color: '#FFEC27',
+              ...(isTouch && { padding: '9px 14px', fontSize: 11 }) })}
           >
             SAVE TAKE
           </button>
 
-          <button onClick={onCopy} style={actionBtn()}>
+          <button onClick={onCopy} style={actionBtn({ ...(isTouch && { padding: '9px 14px', fontSize: 11 }) })}>
             COPY SFX
           </button>
 
           <button
             onClick={onClear}
-            style={actionBtn({ border: '1px solid #FF004D', color: '#FF004D' })}
+            style={actionBtn({ border: '1px solid #FF004D', color: '#FF004D',
+              ...(isTouch && { padding: '9px 14px', fontSize: 11 }) })}
           >
             CLEAR
           </button>
