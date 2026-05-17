@@ -267,6 +267,10 @@ function TabContent({ tab, sfx, sfxSlots, curSfx, selectedNote, savedTakes,
           isPlaying={patterns.isPlaying}
           playPos={patterns.playPos}
           notePos={patterns.notePos}
+          mutedChannels={patterns.mutedChannels}
+          soloChannel={patterns.soloChannel}
+          toggleMute={patterns.toggleMute}
+          toggleSolo={patterns.toggleSolo}
           updateChannel={patterns.updateChannel}
           updateFlags={patterns.updateFlags}
           playPatterns={patterns.playPatterns}

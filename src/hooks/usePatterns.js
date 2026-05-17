@@ -66,22 +66,31 @@ export function patternToLine(pat) {
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function usePatterns(sfxSlots) {
-  const [patterns,   setPatterns]   = useState(readStorage);
-  const [curPattern, setCurPattern] = useState(0);
-  const [isPlaying,  setIsPlaying]  = useState(false);
-  const [playPos,    setPlayPos]    = useState(-1);
-  const [notePos,    setNotePos]    = useState(-1); // 0-31 within current pattern
+  const [patterns,      setPatterns]      = useState(readStorage);
+  const [curPattern,    setCurPattern]    = useState(0);
+  const [isPlaying,     setIsPlaying]     = useState(false);
+  const [playPos,       setPlayPos]       = useState(-1);
+  const [notePos,       setNotePos]       = useState(-1); // 0-31 within current pattern
+  const [mutedChannels, setMutedChannels] = useState([false, false, false, false]);
+  const [soloChannel,   setSoloChannel]   = useState(null); // null or 0-3
 
   // Stable refs — callbacks never re-register because they read through these
-  const patternsRef   = useRef(patterns);
-  const sfxSlotsRef   = useRef(sfxSlots);
-  const curPatternRef = useRef(curPattern);
-  const playTimersRef = useRef([]);
-  const stopRef       = useRef(false);
+  const patternsRef     = useRef(patterns);
+  const sfxSlotsRef     = useRef(sfxSlots);
+  const curPatternRef   = useRef(curPattern);
+  const playTimersRef   = useRef([]);
+  const stopRef         = useRef(false);
+  // Mute check is a ref so note callbacks can read the latest value mid-playback
+  const muteCheckRef    = useRef(() => false);
 
   useEffect(() => { patternsRef.current   = patterns;   }, [patterns]);
   useEffect(() => { sfxSlotsRef.current   = sfxSlots;   }, [sfxSlots]);
   useEffect(() => { curPatternRef.current = curPattern; }, [curPattern]);
+  // Keep muteCheck in sync so live playback sees latest mute/solo state
+  useEffect(() => {
+    muteCheckRef.current = (ci) =>
+      soloChannel !== null ? ci !== soloChannel : mutedChannels[ci];
+  }, [mutedChannels, soloChannel]);
 
   // Debounced persistence
   useEffect(() => {
@@ -98,6 +107,16 @@ export function usePatterns(sfxSlots) {
   }, []);
 
   // ── Mutations ────────────────────────────────────────────────────────────────
+
+  const toggleMute = useCallback((ci) => {
+    setSoloChannel(null); // clear solo when manually muting
+    setMutedChannels(prev => prev.map((m, i) => i === ci ? !m : m));
+  }, []);
+
+  const toggleSolo = useCallback((ci) => {
+    setSoloChannel(prev => prev === ci ? null : ci);
+    setMutedChannels([false, false, false, false]); // reset individual mutes on solo
+  }, []);
 
   const updateChannel = useCallback((patIdx, chIdx, sfxIdx) => {
     setPatterns(pats => {
@@ -175,8 +194,10 @@ export function usePatterns(sfxSlots) {
         if (stopRef.current) return;
         setPlayPos(patIdx);
 
-        // Schedule every note of every active channel simultaneously
-        pat.channels.forEach(sfxIdx => {
+        // Schedule every note of every active channel simultaneously.
+        // muteCheckRef lets mute/solo changes take effect on the next note,
+        // even mid-playback, without re-scheduling the entire sequence.
+        pat.channels.forEach((sfxIdx, ci) => {
           if (sfxIdx === null) return;
           const sfx = sfxSlots[sfxIdx];
           if (!sfx) return;
@@ -186,12 +207,13 @@ export function usePatterns(sfxSlots) {
             if (!note.on) return;
             const noteId = setTimeout(() => {
               if (stopRef.current) return;
+              if (muteCheckRef.current(ci)) return; // honour mute/solo
               audioEngine.synthNote(
                 note.pitch, note.waveform, note.volume, note.effect, noteDur,
                 ni > 0 ? sfx.notes[ni - 1].pitch : note.pitch,
               );
             }, Math.round(ni * noteDur * 1000));
-            ids.push(noteId); // tracked via shared reference
+            ids.push(noteId);
           });
         });
       }, atMs);
@@ -219,6 +241,7 @@ export function usePatterns(sfxSlots) {
   return {
     patterns, curPattern, setCurPattern,
     isPlaying, playPos, notePos,
+    mutedChannels, soloChannel, toggleMute, toggleSolo,
     updateChannel, updateFlags,
     playPatterns, stopPatternPlay,
     exportMusic,
