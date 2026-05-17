@@ -6,6 +6,7 @@ import { useMidi }        from './hooks/useMidi.js';
 import { usePatterns }    from './hooks/usePatterns.js';
 import { useViewport }    from './hooks/useViewport.js';
 import { mkNote, buildScaleNotes, snapToScale, nextScalePitch } from './utils.js';
+import { CH_ROLES, CH_COLORS } from './constants.js';
 import { audioEngine }    from './audio.js';
 
 import Toolbar         from './components/Toolbar.jsx';
@@ -13,7 +14,6 @@ import ScaleSelector   from './components/ScaleSelector.jsx';
 import NoteGrid        from './components/NoteGrid.jsx';
 import NoteEditor      from './components/NoteEditor.jsx';
 import PianoKeyboard   from './components/PianoKeyboard.jsx';
-import WaveformDisplay from './components/WaveformDisplay.jsx';
 import TakesList       from './components/TakesList.jsx';
 import ExportPanel     from './components/ExportPanel.jsx';
 import PatternEditor   from './components/PatternEditor.jsx';
@@ -317,7 +317,7 @@ export default function App() {
   // ── SFX state ───────────────────────────────────────────────────────────────
   const {
     sfxSlots, curSfx, selectedNote, isPlaying, playPos, savedTakes,
-    updateNote, updateSfxField, setCurSfx, setSelectedNote,
+    updateNote, updateAnyNote, updateSfxField, setCurSfx, setSelectedNote,
     playSfx, stopPlay, saveTake, loadTake, deleteTake, exportSingle,
   } = useSfxEditor();
 
@@ -425,10 +425,14 @@ export default function App() {
     />
   );
 
-  // ── Shared editing column ───────────────────────────────────────────────────
+  // ── 4-track editing column ──────────────────────────────────────────────────
+  // Each track maps to one channel of the current pattern.
+  // Fallback: if a channel is unassigned, use SFX 0-3 so grids are always live.
+  const curPat            = patterns.patterns[patterns.curPattern];
+  const effectiveChannels = curPat.channels.map((ch, ci) => ch ?? ci);
+
   const editingColumn = (
     <>
-      {/* Scale / key selector — spans full width above grid */}
       <ScaleSelector
         scaleKey={scaleKey}
         scaleMode={scaleMode}
@@ -438,19 +442,61 @@ export default function App() {
         isTouch={vp.isTouch}
       />
 
-      <div style={{ padding: '8px 12px', borderBottom: '1px solid #1c1c1c', flexShrink: 0 }}>
-        <WaveformDisplay currentWaveform={note.waveform} />
+      {/* 4-track grid ─────────────────────────────────────────────────────── */}
+      <div style={{ flexShrink: 0, overflowY: 'auto' }}>
+        {CH_ROLES.map((role, ci) => {
+          const sfxIdx   = effectiveChannels[ci];
+          const trackSfx = sfxSlots[sfxIdx];
+          const color    = CH_COLORS[ci];
+          const isActive = curSfx === sfxIdx;
+
+          // Pattern playback keeps all 4 tracks in lockstep via notePos;
+          // single-SFX play only lights up the active track.
+          const trackPlayPos = patterns.isPlaying
+            ? patterns.notePos
+            : (isPlaying && isActive ? playPos : -1);
+
+          return (
+            <div key={ci} style={{
+              borderBottom: '1px solid #1c1c1c',
+              borderLeft: `3px solid ${isActive ? color : '#1c1c1c'}`,
+              backgroundColor: isActive ? `${color}07` : 'transparent',
+            }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '3px 10px', userSelect: 'none',
+              }}>
+                <span style={{ fontSize: 8, letterSpacing: 1.5, fontWeight: 'bold', color }}>
+                  {role}
+                </span>
+                <span style={{ fontSize: 8, color: '#5F574F' }}>
+                  SFX {sfxIdx.toString(16).padStart(2, '0').toUpperCase()}
+                </span>
+                {curPat.channels[ci] === null && (
+                  <span style={{ fontSize: 7, color: '#2a2a2a' }}>· assign in PATTERNS</span>
+                )}
+              </div>
+              <div style={{ padding: '0 10px 4px' }}>
+                <NoteGrid
+                  notes={trackSfx.notes}
+                  selectedNote={isActive ? selectedNote : -1}
+                  playPos={trackPlayPos}
+                  onNoteClick={ni => {
+                    setCurSfx(sfxIdx);
+                    setSelectedNote(ni);
+                    setTab('edit');
+                    markInteracted();
+                  }}
+                  onDragPaint={(ni, on) => updateAnyNote(sfxIdx, ni, { on })}
+                  rowHeight={72}
+                />
+              </div>
+            </div>
+          );
+        })}
       </div>
-      <div style={{ padding: '8px 12px', borderBottom: '1px solid #1c1c1c', flexShrink: 0 }}>
-        <NoteGrid
-          notes={sfx.notes}
-          selectedNote={selectedNote}
-          playPos={playPos}
-          onNoteClick={i => { setSelectedNote(i); setTab('edit'); }}
-          onDragPaint={(i, on) => updateNote(i, { on })}
-        />
-      </div>
-      {/* Desktop piano — touch devices get the full-width strip at the bottom instead */}
+
+      {/* Desktop piano */}
       {!vp.isTouch && (
         <div style={{ padding: '8px 12px', flexShrink: 0 }}>
           <PianoKeyboard

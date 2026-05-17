@@ -1,11 +1,9 @@
 import { useState } from 'react';
+import { CH_ROLES, CH_COLORS } from '../constants.js';
 
 const IDX_W  = 28;
 const CH_W   = 52;
 const FLAG_W = 22;
-
-const CH_ROLES  = ['BASS', 'MELODY', 'CHORDS', 'DRUMS'];
-const CH_COLORS = ['#29ADFF', '#00E436', '#FFEC27', '#FF77A8'];
 
 // ── ChannelCell ───────────────────────────────────────────────────────────────
 function ChannelCell({ value, onChange, onNavigate, color }) {

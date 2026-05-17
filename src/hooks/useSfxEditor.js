@@ -66,6 +66,18 @@ export function useSfxEditor() {
     });
   }, []);
 
+  // Like updateNote but targets any SFX slot by index — used by the 4-track grid
+  // so drag-painting in track 2 updates that track's SFX without changing curSfx.
+  const updateAnyNote = useCallback((sfxIdx, noteIdx, patch) => {
+    setSfxSlots(slots => {
+      const notes = [...slots[sfxIdx].notes];
+      notes[noteIdx] = { ...notes[noteIdx], ...patch };
+      const next = [...slots];
+      next[sfxIdx] = { ...slots[sfxIdx], notes };
+      return next;
+    });
+  }, []);
+
   const updateSfxField = useCallback((patch) => {
     setSfxSlots(slots => {
       const cur = curSfxRef.current;
@@ -185,6 +197,7 @@ export function useSfxEditor() {
     savedTakes,
     // Actions
     updateNote,
+    updateAnyNote,
     updateSfxField,
     toggleNote,
     setCurSfx,       // raw React setter — stable reference, safe to pass as prop

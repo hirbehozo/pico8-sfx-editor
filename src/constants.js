@@ -138,6 +138,12 @@ export const MODE_LABELS = Object.fromEntries(
   MODE_GROUPS.flatMap(g => g.modes.map(({ id, label }) => [id, label]))
 );
 
+// ── 4-channel music track identity ───────────────────────────────────────────
+// Matches the PICO-8 convention: ch0=bass, ch1=melody, ch2=chords, ch3=drums.
+// Users can assign any SFX to any channel — these are suggested roles only.
+export const CH_ROLES  = ['BASS', 'MELODY', 'CHORDS', 'DRUMS'];
+export const CH_COLORS = ['#29ADFF', '#00E436', '#FFEC27', '#FF77A8'];
+
 // 64 pitches: C1 (pitch 0) through D#6 (pitch 63)
 export const NOTE_NAMES = Array.from({ length: 64 }, (_, i) => {
   const octave = Math.floor(i / 12) + 1;

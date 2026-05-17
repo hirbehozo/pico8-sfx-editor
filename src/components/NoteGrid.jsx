@@ -2,16 +2,14 @@ import { useRef, useEffect } from 'react';
 import { WAVE_COLS } from '../constants.js';
 import { noteName } from '../utils.js';
 
-const COL_W    = 26;   // px — wider for touch comfort (was 22)
-const COL_H    = 144;  // px
-const HEX_H    = 18;   // px
+const COL_W    = 26;
+const HEX_H    = 18;
 const BAR_PAD  = 2;
-const BAR_AREA = COL_H - HEX_H;
 const BAR_W    = COL_W - BAR_PAD * 2;
 const MIN_BAR_H = 2;
 
-function barHeight(pitch) {
-  return Math.max(MIN_BAR_H, Math.round((pitch / 63) * BAR_AREA));
+function barHeight(pitch, barArea) {
+  return Math.max(MIN_BAR_H, Math.round((pitch / 63) * barArea));
 }
 
 const hexStyle = {
@@ -32,7 +30,9 @@ const nameStyle = {
 
 export default function NoteGrid({
   notes, selectedNote, playPos, onNoteClick, onDragPaint,
+  rowHeight = 144,
 }) {
+  const BAR_AREA = rowHeight - HEX_H;
   const drag    = useRef({ active: false, paintOn: false });
   const rowRef  = useRef(null);
   // cbRef keeps callbacks fresh without re-registering native listeners
@@ -108,7 +108,7 @@ export default function NoteGrid({
         ref={rowRef}
         style={{
           display: 'flex',
-          height: COL_H,
+          height: rowHeight,
           width: COL_W * 32,
           touchAction: 'none', // hand all touch gestures to our listeners
         }}
@@ -116,7 +116,7 @@ export default function NoteGrid({
         {notes.map((note, i) => {
           const isSelected = i === selectedNote;
           const isPlaying  = i === playPos;
-          const bh         = barHeight(note.pitch);
+          const bh         = barHeight(note.pitch, BAR_AREA);
           const colBg      = isPlaying ? 'rgba(0,228,54,0.12)' : '#111';
           const shadow     = isSelected ? 'inset 2px 0 0 #29ADFF' : undefined;
           const barColor   = note.on ? WAVE_COLS[note.waveform] : '#252525';
@@ -130,7 +130,7 @@ export default function NoteGrid({
               onMouseEnter={() => handleMouseEnter(i)}
               style={{
                 position: 'relative',
-                width: COL_W, height: COL_H,
+                width: COL_W, height: rowHeight,
                 flexShrink: 0, boxSizing: 'border-box',
                 backgroundColor: colBg,
                 borderRight: '1px solid #1c1c1c',
