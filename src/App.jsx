@@ -500,6 +500,7 @@ export default function App() {
                     markInteracted();
                   }}
                   onDragPaint={(ni, on) => updateAnyNote(sfxIdx, ni, { on })}
+                  onDragPitch={(ni, pitch) => updateAnyNote(sfxIdx, ni, { pitch, on: true })}
                   rowHeight={72}
                 />
               </div>
