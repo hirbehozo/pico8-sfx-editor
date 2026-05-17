@@ -5,6 +5,11 @@ const IS_WHITE  = new Set([0, 2, 4, 5, 7, 9, 11]);
 const WHITE_IDX = { 0:0, 2:1, 4:2, 5:3, 7:4, 9:5, 11:6 };
 const BLACK_OFF = { 1:0.65, 3:1.65, 6:3.65, 8:4.65, 10:5.65 };
 
+// C4 = pitch 36: notes below this are "bass", C4 and above are "lead".
+// Divider x-position: octave 3 × 7 white keys = 21 white key widths from left.
+const LEAD_FROM   = 36;
+const DIVIDER_COL = 21; // white-key columns from left edge to C4
+
 // keyW / keyH let the caller scale keys for touch (default = desktop size)
 // fillWidth: clips overflow instead of scrolling — use when piano spans full viewport width
 // validNotes: Set<0-11> of in-scale chromatic indices, or null for chromatic (no dim)
@@ -70,6 +75,7 @@ export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH
         {/* White keys ─────────────────────────────────────────────────────── */}
         {whites.map(({ pitch, left, active, label }) => {
           const inScale = !validNotes || validNotes.has(pitch % 12);
+          const isBass  = pitch < LEAD_FROM;
           return (
           <div
             key={pitch}
@@ -79,8 +85,12 @@ export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH
               position: 'absolute', left, top: 0,
               width: keyW, height: keyH,
               boxSizing: 'border-box',
-              border: '1px solid #3a3a3a',
-              backgroundColor: active ? P8[10] : inScale ? P8[7] : '#9a9b9f',
+              border: `1px solid ${isBass ? '#2a3a5a' : '#3a3a3a'}`,
+              backgroundColor: active
+                ? P8[10]
+                : inScale
+                  ? (isBass ? '#c8d8ff' : P8[7])
+                  : (isBass ? '#7888b8' : '#9a9b9f'),
               cursor: 'pointer',
               opacity: inScale ? 1 : 0.55,
             }}
@@ -104,6 +114,7 @@ export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH
         {/* Black keys ─────────────────────────────────────────────────────── */}
         {blacks.map(({ pitch, left, active }) => {
           const inScale = !validNotes || validNotes.has(pitch % 12);
+          const isBass  = pitch < LEAD_FROM;
           return (
           <div
             key={pitch}
@@ -115,13 +126,40 @@ export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH
               boxSizing: 'border-box',
               border: '1px solid #000',
               borderRadius: '0 0 3px 3px',
-              backgroundColor: active ? P8[9] : inScale ? P8[1] : '#2a2a2a',
+              backgroundColor: active
+                ? P8[9]
+                : inScale
+                  ? (isBass ? '#0d1a40' : P8[1])
+                  : '#2a2a2a',
               zIndex: 1, cursor: 'pointer',
               opacity: inScale ? 1 : 0.45,
             }}
           />
           );
         })}
+
+        {/* Bass / Lead divider at C4 ──────────────────────────────────────── */}
+        <div style={{
+          position: 'absolute',
+          left: DIVIDER_COL * keyW - 1,
+          top: 0, width: 2, height: keyH,
+          backgroundColor: '#FFEC27', opacity: 0.5,
+          zIndex: 6, pointerEvents: 'none',
+        }} />
+        <span style={{
+          position: 'absolute',
+          left: Math.max(2, DIVIDER_COL * keyW - 34),
+          bottom: 4,
+          fontFamily: 'monospace', fontSize: 7, letterSpacing: 1,
+          color: '#4060a0', zIndex: 6, pointerEvents: 'none', userSelect: 'none',
+        }}>BASS</span>
+        <span style={{
+          position: 'absolute',
+          left: DIVIDER_COL * keyW + 4,
+          bottom: 4,
+          fontFamily: 'monospace', fontSize: 7, letterSpacing: 1,
+          color: '#7090c0', zIndex: 6, pointerEvents: 'none', userSelect: 'none',
+        }}>LEAD</span>
 
       </div>
     </div>
