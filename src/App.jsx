@@ -347,8 +347,11 @@ export default function App() {
 
   // ── Keyboard shortcuts ──────────────────────────────────────────────────────
   const { octave } = useKeyboard({
-    selectedNote, sfx, isPlaying,
-    setSelectedNote, updateNote, playSfx, stopPlay,
+    selectedNote, sfx,
+    isPlaying:  patterns.isPlaying,
+    setSelectedNote, updateNote,
+    playSfx:   () => patterns.playPatterns(),
+    stopPlay:  patterns.stopPatternPlay,
     snapPitch, nextPitch,
   });
 
@@ -408,17 +411,17 @@ export default function App() {
     setSelectedNote(prev => Math.min(prev + 1, 31));
   }, [updateNote, setSelectedNote, markInteracted]);
 
-  const handlePlay = useCallback(() => { markInteracted(); playSfx(); }, [playSfx, markInteracted]);
+  const handlePlay = useCallback(() => { markInteracted(); patterns.playPatterns(); }, [patterns, markInteracted]);
 
   // ── Shared toolbar ──────────────────────────────────────────────────────────
   const toolbar = (
     <Toolbar
-      curSfx={curSfx}  sfx={sfx}  isPlaying={isPlaying}  isTouch={vp.isTouch}
+      curSfx={curSfx}  sfx={sfx}  isPlaying={patterns.isPlaying}  isTouch={vp.isTouch}
       onHelp={() => setShowHelp(true)}
       midiStatus={midiStatus}
       onPrev={() => setCurSfx(Math.max(0, curSfx - 1))}
       onNext={() => setCurSfx(Math.min(63, curSfx + 1))}
-      onPlay={handlePlay}  onStop={stopPlay}
+      onPlay={handlePlay}  onStop={patterns.stopPatternPlay}
       onSave={saveTake}  onCopy={handleCopy}  onClear={handleClear}
       onSpeedChange={v => updateSfxField({ speed: v })}
       onLoopStartChange={v => updateSfxField({ loopStart: v })}
