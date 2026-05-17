@@ -20,6 +20,9 @@ class AudioEngine {
       this._analyser.smoothingTimeConstant = 0.75;
       this._analyser.connect(this._ctx.destination);
     }
+    // iOS and some browsers create the context in a suspended state even
+    // during a user gesture. Resume whenever we're about to use it.
+    if (this._ctx.state === 'suspended') this._ctx.resume();
     return this._ctx;
   }
 

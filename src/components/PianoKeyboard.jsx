@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useEffect } from 'react';
 import { P8 } from '../constants.js';
 
 const IS_WHITE  = new Set([0, 2, 4, 5, 7, 9, 11]);
@@ -37,16 +37,34 @@ export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH
       }
     }
     return { whites, blacks };
-  }, [activePitch, keyW]); // re-derive if key size changes
+  }, [activePitch, keyW]);
 
-  // Touch handler: fire immediately, prevent ghost-click delay
-  const onTouch = (e, pitch) => {
-    e.preventDefault();
-    onKeyPress(pitch);
-  };
+  // Native touchstart listener with { passive: false } so preventDefault works.
+  // React registers onTouchStart as passive in modern builds, which silently
+  // ignores preventDefault and lets the browser fire a ghost click 300ms later.
+  const wrapRef = useRef(null);
+  const onKeyPressRef = useRef(onKeyPress);
+  useEffect(() => { onKeyPressRef.current = onKeyPress; }, [onKeyPress]);
+
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const onTouch = (e) => {
+      e.preventDefault(); // blocks ghost click and long-press context menu
+      const t = e.changedTouches[0];
+      const target = document.elementFromPoint(t.clientX, t.clientY);
+      const keyEl  = target?.closest('[data-pitch]');
+      if (keyEl) onKeyPressRef.current(parseInt(keyEl.dataset.pitch, 10));
+    };
+    el.addEventListener('touchstart', onTouch, { passive: false });
+    return () => el.removeEventListener('touchstart', onTouch);
+  }, []); // register once; fresh callback via ref
 
   return (
-    <div style={{ overflowX: fillWidth ? 'hidden' : 'auto', overflowY: 'hidden', userSelect: 'none', WebkitUserSelect: 'none' }}>
+    <div
+      ref={wrapRef}
+      style={{ overflowX: fillWidth ? 'hidden' : 'auto', overflowY: 'hidden', userSelect: 'none', WebkitUserSelect: 'none' }}
+    >
       <div style={{ position: 'relative', width: containerW, height: keyH }}>
 
         {/* White keys ─────────────────────────────────────────────────────── */}
@@ -55,8 +73,8 @@ export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH
           return (
           <div
             key={pitch}
+            data-pitch={pitch}
             onClick={() => onKeyPress(pitch)}
-            onTouchStart={e => onTouch(e, pitch)}
             style={{
               position: 'absolute', left, top: 0,
               width: keyW, height: keyH,
@@ -89,8 +107,8 @@ export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH
           return (
           <div
             key={pitch}
+            data-pitch={pitch}
             onClick={() => onKeyPress(pitch)}
-            onTouchStart={e => onTouch(e, pitch)}
             style={{
               position: 'absolute', left, top: 0,
               width: blackW, height: blackH,
