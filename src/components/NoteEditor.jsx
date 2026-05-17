@@ -1,3 +1,4 @@
+import { useRef, useEffect, useState } from 'react';
 import { WAVE_COLS, EFF_COLS } from '../constants.js';
 import { noteName } from '../utils.js';
 import { audioEngine } from '../audio.js';
@@ -54,6 +55,17 @@ function Knob({ label, value, min, max, onChange, isTouch = false }) {
   const ab = isTouch
     ? { ...arrowBtn, padding: '10px 14px', fontSize: 14 }
     : arrowBtn;
+
+  // Flash the displayed value whenever it changes (selection, drag, arrow keys)
+  const [flashKey, setFlashKey] = useState(0);
+  const prev = useRef(value);
+  useEffect(() => {
+    if (value !== prev.current) {
+      prev.current = value;
+      setFlashKey(k => k + 1);
+    }
+  }, [value]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
       <span style={{
@@ -72,7 +84,7 @@ function Knob({ label, value, min, max, onChange, isTouch = false }) {
         >
           ◀
         </button>
-        <span style={{
+        <span key={flashKey} className={flashKey > 0 ? 'p8-flash' : ''} style={{
           fontFamily: 'monospace',
           fontSize: 14,
           color: '#FFF1E8',

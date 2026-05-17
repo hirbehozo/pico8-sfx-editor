@@ -46,6 +46,14 @@ body::after {
 /* Firefox */
 * { scrollbar-width: thin; scrollbar-color: #5f574f #1a1c2c; }
 
+/* ── Knob value flash (pitch / volume change feedback) ──────────────────────── */
+@keyframes p8-flash {
+  0%   { color: #FFEC27; transform: scale(1.25); }
+  60%  { color: #FFEC27; transform: scale(1.1);  }
+  100% { color: #FFF1E8; transform: scale(1);    }
+}
+.p8-flash { animation: p8-flash 0.35s ease-out both; }
+
 /* ── Rotate-prompt icon float animation ─────────────────────────────────────── */
 @keyframes p8-hint {
   0%, 100% { transform: translateY(0);    opacity: 0.75; }
