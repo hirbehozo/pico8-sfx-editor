@@ -1,4 +1,4 @@
-import { KEY_NAMES, MODES, MODE_LABELS } from '../constants.js';
+import { KEY_NAMES, MODE_GROUPS } from '../constants.js';
 
 const CHROMATIC_NAMES = KEY_NAMES; // C C# D D# E F F# G G# A A# B
 
@@ -57,8 +57,12 @@ export default function ScaleSelector({ scaleKey, scaleMode, onKeyChange, onMode
           title="Scale mode. In any mode other than Chromatic, only in-scale notes are playable — great for staying in tune."
           style={selTouch}
         >
-          {Object.entries(MODE_LABELS).map(([id, label]) => (
-            <option key={id} value={id}>{label}</option>
+          {MODE_GROUPS.map(({ label: groupLabel, modes }) => (
+            <optgroup key={groupLabel} label={groupLabel}>
+              {modes.map(({ id, label }) => (
+                <option key={id} value={id}>{label}</option>
+              ))}
+            </optgroup>
           ))}
         </select>
       </div>
