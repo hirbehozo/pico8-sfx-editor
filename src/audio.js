@@ -206,11 +206,23 @@ class AudioEngine {
     }
 
     // -------------------------------------------------------------------------
+    // De-click: ramp gain to 0 just before the note ends so the oscillator
+    // doesn't cut mid-cycle and produce an audible pop.
+    // Fade-out (effect 5) already reaches 0 at `duration`, so skip it.
+    // -------------------------------------------------------------------------
+    const DECLICK = 0.012; // 12 ms — inaudible as a fade, eliminates the click
+    if (effect !== 5) {
+      const rampStart = Math.max(now, now + duration - DECLICK);
+      masterGain.gain.setValueAtTime(targetGain, rampStart);
+      masterGain.gain.linearRampToValueAtTime(0, now + duration);
+    }
+
+    // -------------------------------------------------------------------------
     // Start & schedule stop for all source nodes
     // -------------------------------------------------------------------------
     for (const { osc } of sources) {
       osc.start(now);
-      osc.stop(now + duration);
+      osc.stop(now + duration + 0.005); // tiny tail so gain ramp completes first
     }
 
     this._active.push({ toStop, masterGain });
