@@ -13,7 +13,10 @@ const DIVIDER_COL = 21; // white-key columns from left edge to C4
 // keyW / keyH let the caller scale keys for touch (default = desktop size)
 // fillWidth: clips overflow instead of scrolling — use when piano spans full viewport width
 // validNotes: Set<0-11> of in-scale chromatic indices, or null for chromatic (no dim)
-export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH = 64, validNotes = null, fillWidth = false }) {
+// rangeHint: 'bass' dims notes >= C4 (out of bass register)
+//            'lead' dims notes <  C4 (out of lead/melody register)
+//            undefined = no range hint
+export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH = 64, validNotes = null, fillWidth = false, rangeHint }) {
   const blackW = Math.round(keyW * 0.6);
   const blackH = Math.round(keyH * 0.62);
 
@@ -74,8 +77,10 @@ export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH
 
         {/* White keys ─────────────────────────────────────────────────────── */}
         {whites.map(({ pitch, left, active, label }) => {
-          const inScale = !validNotes || validNotes.has(pitch % 12);
-          const isBass  = pitch < LEAD_FROM;
+          const inScale      = !validNotes || validNotes.has(pitch % 12);
+          const isBass       = pitch < LEAD_FROM;
+          const outOfRange   = rangeHint === 'bass' ? !isBass : rangeHint === 'lead' ? isBass : false;
+          const baseOpacity  = inScale ? 1 : 0.55;
           return (
           <div
             key={pitch}
@@ -92,7 +97,7 @@ export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH
                   ? (isBass ? '#c8d8ff' : P8[7])
                   : (isBass ? '#7888b8' : '#9a9b9f'),
               cursor: 'pointer',
-              opacity: inScale ? 1 : 0.55,
+              opacity: outOfRange ? baseOpacity * 0.38 : baseOpacity,
             }}
           >
             {label && (
@@ -113,8 +118,10 @@ export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH
 
         {/* Black keys ─────────────────────────────────────────────────────── */}
         {blacks.map(({ pitch, left, active }) => {
-          const inScale = !validNotes || validNotes.has(pitch % 12);
-          const isBass  = pitch < LEAD_FROM;
+          const inScale     = !validNotes || validNotes.has(pitch % 12);
+          const isBass      = pitch < LEAD_FROM;
+          const outOfRange  = rangeHint === 'bass' ? !isBass : rangeHint === 'lead' ? isBass : false;
+          const baseOpacity = inScale ? 1 : 0.45;
           return (
           <div
             key={pitch}
@@ -132,7 +139,7 @@ export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH
                   ? (isBass ? '#0d1a40' : P8[1])
                   : '#2a2a2a',
               zIndex: 1, cursor: 'pointer',
-              opacity: inScale ? 1 : 0.45,
+              opacity: outOfRange ? baseOpacity * 0.38 : baseOpacity,
             }}
           />
           );

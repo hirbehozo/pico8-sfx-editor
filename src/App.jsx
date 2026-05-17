@@ -431,6 +431,14 @@ export default function App() {
   const curPat            = patterns.patterns[patterns.curPattern];
   const effectiveChannels = curPat.channels.map((ch, ci) => ch ?? ci);
 
+  // Show which register is "home" on the piano for the active track.
+  // Bass (ch0) lives below C4 → dim C4 and up.
+  // Melody (ch1) lives above C4 → dim below C4.
+  const activeChannelIdx = effectiveChannels.indexOf(curSfx);
+  const rangeHint = activeChannelIdx === 0 ? 'bass'
+    : activeChannelIdx === 1 ? 'lead'
+    : undefined;
+
   const editingColumn = (
     <>
       <ScaleSelector
@@ -505,6 +513,7 @@ export default function App() {
             keyW={22}
             keyH={64}
             validNotes={validNotes}
+            rangeHint={rangeHint}
           />
         </div>
       )}
@@ -566,6 +575,7 @@ export default function App() {
             keyW={pianoKeyW}
             keyH={pianoKeyH}
             validNotes={validNotes}
+            rangeHint={rangeHint}
             fillWidth
           />
         </div>
