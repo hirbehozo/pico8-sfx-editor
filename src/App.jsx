@@ -1,22 +1,22 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-import { useSfxEditor }  from './hooks/useSfxEditor.js';
-import { useKeyboard }   from './hooks/useKeyboard.js';
-import { useMidi }       from './hooks/useMidi.js';
-import { usePatterns }   from './hooks/usePatterns.js';
-import { mkNote }        from './utils.js';
-import { audioEngine }   from './audio.js';
+import { useSfxEditor }   from './hooks/useSfxEditor.js';
+import { useKeyboard }    from './hooks/useKeyboard.js';
+import { useMidi }        from './hooks/useMidi.js';
+import { usePatterns }    from './hooks/usePatterns.js';
+import { useViewport }    from './hooks/useViewport.js';
+import { mkNote }         from './utils.js';
+import { audioEngine }    from './audio.js';
 
-import Toolbar        from './components/Toolbar.jsx';
-import NoteGrid       from './components/NoteGrid.jsx';
-import NoteEditor     from './components/NoteEditor.jsx';
-import PianoKeyboard  from './components/PianoKeyboard.jsx';
+import Toolbar         from './components/Toolbar.jsx';
+import NoteGrid        from './components/NoteGrid.jsx';
+import NoteEditor      from './components/NoteEditor.jsx';
+import PianoKeyboard   from './components/PianoKeyboard.jsx';
 import WaveformDisplay from './components/WaveformDisplay.jsx';
-import TakesList      from './components/TakesList.jsx';
-import ExportPanel    from './components/ExportPanel.jsx';
-import PatternEditor  from './components/PatternEditor.jsx';
+import TakesList       from './components/TakesList.jsx';
+import ExportPanel     from './components/ExportPanel.jsx';
+import PatternEditor   from './components/PatternEditor.jsx';
 
-// ── Tab definitions ───────────────────────────────────────────────────────────
 const TABS = [
   { id: 'edit',     label: 'EDIT'     },
   { id: 'takes',    label: 'TAKES'    },
@@ -24,10 +24,93 @@ const TABS = [
   { id: 'patterns', label: 'PATTERNS' },
 ];
 
+// ── TabBar shared by both layouts ─────────────────────────────────────────────
+function TabBar({ tab, setTab, bottom = false }) {
+  return (
+    <div style={{
+      display: 'flex',
+      borderTop:    bottom ? '1px solid #1c1c1c' : 'none',
+      borderBottom: bottom ? 'none' : '1px solid #1c1c1c',
+      flexShrink: 0,
+      backgroundColor: '#0d0d0d',
+    }}>
+      {TABS.map(({ id, label }) => (
+        <button
+          key={id}
+          onClick={() => setTab(id)}
+          style={{
+            flex: 1,
+            fontFamily: 'monospace',
+            fontSize: 9,
+            letterSpacing: 1,
+            padding: '10px 0',  // 44 px touch target height
+            border: 'none',
+            borderTop:    bottom && tab === id ? '2px solid #29ADFF' : bottom ? '2px solid transparent' : 'none',
+            borderBottom: !bottom && tab === id ? '2px solid #29ADFF' : !bottom ? '2px solid transparent' : 'none',
+            backgroundColor: 'transparent',
+            color: tab === id ? '#29ADFF' : '#5F574F',
+            cursor: 'pointer',
+          }}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── TabContent shared by both layouts ─────────────────────────────────────────
+function TabContent({ tab, sfx, sfxSlots, curSfx, selectedNote, savedTakes,
+                      updateNote, loadTake, deleteTake, patterns, previewTake }) {
+  return (
+    <>
+      {tab === 'edit' && (
+        <NoteEditor
+          note={sfx.notes[selectedNote]}
+          noteIndex={selectedNote}
+          onUpdate={patch => updateNote(selectedNote, patch)}
+        />
+      )}
+      {tab === 'takes' && (
+        <TakesList
+          takes={savedTakes}
+          curSfx={curSfx}
+          onLoad={loadTake}
+          onDelete={deleteTake}
+          onPreview={previewTake}
+        />
+      )}
+      {tab === 'export' && (
+        <ExportPanel sfx={sfx} sfxSlots={sfxSlots} curSfx={curSfx} />
+      )}
+      {tab === 'patterns' && (
+        <PatternEditor
+          patterns={patterns.patterns}
+          curPattern={patterns.curPattern}
+          setCurPattern={patterns.setCurPattern}
+          isPlaying={patterns.isPlaying}
+          playPos={patterns.playPos}
+          updateChannel={patterns.updateChannel}
+          updateFlags={patterns.updateFlags}
+          playPatterns={patterns.playPatterns}
+          stopPatternPlay={patterns.stopPatternPlay}
+          exportMusic={patterns.exportMusic}
+        />
+      )}
+    </>
+  );
+}
+
+// ── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
   const [tab, setTab] = useState('edit');
+  const vp = useViewport();
 
-  // ── Core state ──────────────────────────────────────────────────────────────
+  // Piano key sizes — larger on touch devices for comfortable tapping
+  const keyW = vp.isTouch ? 30 : 22;
+  const keyH = vp.isTouch ? 76 : 64;
+
+  // ── SFX state ───────────────────────────────────────────────────────────────
   const {
     sfxSlots, curSfx, selectedNote, isPlaying, playPos, savedTakes,
     updateNote, updateSfxField, setCurSfx, setSelectedNote,
@@ -37,34 +120,29 @@ export default function App() {
   const sfx  = sfxSlots[curSfx];
   const note = sfx.notes[selectedNote];
 
-  // Pattern sequencer (receives sfxSlots so it can read SFX speeds)
   const patterns = usePatterns(sfxSlots);
 
-  // ── AudioContext: create on first pointer interaction ─────────────────────
-  // Browsers keep AudioContext suspended until a user gesture occurs.
-  // Calling getCtx() here (inside a pointerdown) primes it so subsequent
-  // setTimeout-scheduled synthNote calls don't get blocked.
+  // ── AudioContext priming (must happen inside a user gesture) ────────────────
   useEffect(() => {
     const prime = () => audioEngine.getCtx();
     document.addEventListener('pointerdown', prime, { once: true });
     return () => document.removeEventListener('pointerdown', prime);
   }, []);
 
-  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+  // ── Keyboard shortcuts ──────────────────────────────────────────────────────
   const { octave } = useKeyboard({
     selectedNote, sfx, isPlaying,
     setSelectedNote, updateNote, playSfx, stopPlay,
   });
 
-  // ── MIDI input ────────────────────────────────────────────────────────────
-  // Refs keep the handler stable so useMidi doesn't re-register on every render
+  // ── MIDI ────────────────────────────────────────────────────────────────────
   const noteRef    = useRef(note);
-  const selNoteRef = useRef(selectedNote);
-  useEffect(() => { noteRef.current    = note;         }, [note]);
-  useEffect(() => { selNoteRef.current = selectedNote; }, [selectedNote]);
+  const selRef     = useRef(selectedNote);
+  useEffect(() => { noteRef.current = note;         }, [note]);
+  useEffect(() => { selRef.current  = selectedNote; }, [selectedNote]);
 
   const onMidiNote = useCallback(pitch => {
-    const idx = selNoteRef.current;
+    const idx = selRef.current;
     const n   = noteRef.current;
     updateNote(idx, { pitch, on: true });
     audioEngine.synthNote(pitch, n.waveform, n.volume || 5, 0, 0.3);
@@ -73,7 +151,7 @@ export default function App() {
 
   const { midiStatus } = useMidi(onMidiNote);
 
-  // ── Toolbar callbacks ─────────────────────────────────────────────────────
+  // ── Toolbar actions ─────────────────────────────────────────────────────────
   const handleCopy = () =>
     navigator.clipboard.writeText(exportSingle()).catch(() => {});
 
@@ -83,7 +161,7 @@ export default function App() {
       updateSfxField({ notes: Array.from({ length: 32 }, mkNote) });
   };
 
-  // ── Take preview (plays without loading) ─────────────────────────────────
+  // ── Take preview ─────────────────────────────────────────────────────────
   const previewTake = useCallback(take => {
     const s = take.sfx;
     const dur = s.speed / 60;
@@ -98,171 +176,130 @@ export default function App() {
     });
   }, []);
 
-  // ── Piano key → enter note at cursor and advance ──────────────────────────
+  // ── Piano key press ─────────────────────────────────────────────────────────
   const handlePianoKey = useCallback(pitch => {
-    const idx = selNoteRef.current;
+    const idx = selRef.current;
     const n   = noteRef.current;
     updateNote(idx, { pitch, on: true });
     audioEngine.synthNote(pitch, n.waveform, n.volume || 5, 0, 0.3);
     setSelectedNote(prev => Math.min(prev + 1, 31));
   }, [updateNote, setSelectedNote]);
 
-  // ── Render ────────────────────────────────────────────────────────────────
-  return (
-    <div style={{
-      height: '100dvh',
-      display: 'flex',
-      flexDirection: 'column',
-      overflow: 'hidden',
-      backgroundColor: '#111',
-      color: '#C2C3C7',
-      fontFamily: 'monospace',
-    }}>
+  // ── Shared toolbar ──────────────────────────────────────────────────────────
+  const toolbar = (
+    <Toolbar
+      curSfx={curSfx}  sfx={sfx}  isPlaying={isPlaying}
+      onPrev={() => setCurSfx(Math.max(0, curSfx - 1))}
+      onNext={() => setCurSfx(Math.min(63, curSfx + 1))}
+      onPlay={playSfx}  onStop={stopPlay}
+      onSave={saveTake}  onCopy={handleCopy}  onClear={handleClear}
+      onSpeedChange={v => updateSfxField({ speed: v })}
+      onLoopStartChange={v => updateSfxField({ loopStart: v })}
+      onLoopEndChange={v => updateSfxField({ loopEnd: v })}
+    />
+  );
 
-      {/* ── Toolbar ──────────────────────────────────────────────────────── */}
-      <Toolbar
-        curSfx={curSfx}
-        sfx={sfx}
-        isPlaying={isPlaying}
-        onPrev={() => setCurSfx(Math.max(0, curSfx - 1))}
-        onNext={() => setCurSfx(Math.min(63, curSfx + 1))}
-        onPlay={playSfx}
-        onStop={stopPlay}
-        onSave={saveTake}
-        onCopy={handleCopy}
-        onClear={handleClear}
-        onSpeedChange={v => updateSfxField({ speed: v })}
-        onLoopStartChange={v => updateSfxField({ loopStart: v })}
-        onLoopEndChange={v => updateSfxField({ loopEnd: v })}
-      />
+  // ── Shared editing column ───────────────────────────────────────────────────
+  const editingColumn = (
+    <>
+      <div style={{ padding: '8px 12px', borderBottom: '1px solid #1c1c1c', flexShrink: 0 }}>
+        <WaveformDisplay currentWaveform={note.waveform} />
+      </div>
+      <div style={{ padding: '8px 12px', borderBottom: '1px solid #1c1c1c', flexShrink: 0 }}>
+        <NoteGrid
+          notes={sfx.notes}
+          selectedNote={selectedNote}
+          playPos={playPos}
+          onNoteClick={setSelectedNote}
+          onDragPaint={(i, on) => updateNote(i, { on })}
+        />
+      </div>
+      <div style={{ padding: '8px 12px', flexShrink: 0 }}>
+        <PianoKeyboard
+          activePitch={note.pitch}
+          onKeyPress={handlePianoKey}
+          keyW={keyW}
+          keyH={keyH}
+        />
+      </div>
+    </>
+  );
 
-      {/* ── Main area ────────────────────────────────────────────────────── */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+  const tabContent = (
+    <TabContent
+      tab={tab} sfx={sfx} sfxSlots={sfxSlots} curSfx={curSfx}
+      selectedNote={selectedNote} savedTakes={savedTakes}
+      updateNote={updateNote} loadTake={loadTake} deleteTake={deleteTake}
+      patterns={patterns} previewTake={previewTake}
+    />
+  );
 
-        {/* Left column ─────────────────────────────────────────────────── */}
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+  const root = { height: '100dvh', display: 'flex', flexDirection: 'column',
+                 overflow: 'hidden', backgroundColor: '#111', color: '#C2C3C7',
+                 fontFamily: 'monospace' };
 
-          {/* Waveform display + keyboard hint */}
-          <div style={{
-            display: 'flex',
-            gap: 12,
-            padding: '8px 12px',
-            borderBottom: '1px solid #1c1c1c',
-            flexShrink: 0,
-          }}>
-            <WaveformDisplay currentWaveform={note.waveform} />
-            <div style={{ fontSize: 8, color: '#3a3a3a', lineHeight: 2, paddingTop: 2, userSelect: 'none' }}>
-              <div><span style={{ color: '#5F574F' }}>SPACE</span> play / stop</div>
-              <div><span style={{ color: '#5F574F' }}>← →</span> select note</div>
-              <div><span style={{ color: '#5F574F' }}>↑ ↓</span> pitch ±1</div>
-              <div><span style={{ color: '#5F574F' }}>⇧↑ ⇧↓</span> volume ±1</div>
-              <div><span style={{ color: '#5F574F' }}>DEL</span> note off</div>
-              <div><span style={{ color: '#5F574F' }}>TAB</span> next waveform</div>
-              <div><span style={{ color: '#5F574F' }}>1–8</span> set waveform</div>
-              <div><span style={{ color: '#5F574F' }}>[ ]</span> octave <span style={{ color: '#83769C' }}>{octave}</span></div>
-              <div><span style={{ color: '#5F574F' }}>Q–P / Z–M</span> piano keys</div>
-              {midiStatus === 'ready' && (
-                <div style={{ color: '#00E436', marginTop: 4 }}>● MIDI</div>
-              )}
-            </div>
-          </div>
+  // ── Portrait layout (compact or tall): vertical stack, bottom tab bar ────────
+  if (vp.isCompact) {
+    return (
+      <div style={root}>
+        {toolbar}
 
-          {/* Note grid */}
-          <div style={{ padding: '8px 12px', borderBottom: '1px solid #1c1c1c', flexShrink: 0 }}>
-            <NoteGrid
-              notes={sfx.notes}
-              selectedNote={selectedNote}
-              playPos={playPos}
-              onNoteClick={setSelectedNote}
-              onDragPaint={(i, on) => updateNote(i, { on })}
-            />
-          </div>
-
-          {/* Piano keyboard */}
-          <div style={{ padding: '8px 12px', flexShrink: 0 }}>
-            <PianoKeyboard
-              activePitch={note.pitch}
-              onKeyPress={handlePianoKey}
-            />
-          </div>
-
+        {/* Scrollable top section: waveform + grid + piano */}
+        <div style={{ flexShrink: 0, overflow: 'hidden' }}>
+          {editingColumn}
         </div>
 
-        {/* Right sidebar ───────────────────────────────────────────────── */}
-        <div style={{
-          width: 370,
-          flexShrink: 0,
-          borderLeft: '1px solid #1c1c1c',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}>
-
-          {/* Tab bar */}
-          <div style={{ display: 'flex', borderBottom: '1px solid #1c1c1c', flexShrink: 0 }}>
-            {TABS.map(({ id, label }) => (
-              <button
-                key={id}
-                onClick={() => setTab(id)}
-                style={{
-                  flex: 1,
-                  fontFamily: 'monospace',
-                  fontSize: 8,
-                  letterSpacing: 1,
-                  padding: '8px 0',
-                  border: 'none',
-                  borderBottom: tab === id ? '2px solid #29ADFF' : '2px solid transparent',
-                  backgroundColor: 'transparent',
-                  color: tab === id ? '#29ADFF' : '#5F574F',
-                  cursor: 'pointer',
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* Tab content */}
+        {/* Bottom panel: tab bar at bottom edge, content above it */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column',
+                      overflow: 'hidden', minHeight: 0 }}>
           <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-            {tab === 'edit' && (
-              <NoteEditor
-                note={note}
-                noteIndex={selectedNote}
-                onUpdate={patch => updateNote(selectedNote, patch)}
-              />
-            )}
-            {tab === 'takes' && (
-              <TakesList
-                takes={savedTakes}
-                curSfx={curSfx}
-                onLoad={loadTake}
-                onDelete={deleteTake}
-                onPreview={previewTake}
-              />
-            )}
-            {tab === 'export' && (
-              <ExportPanel
-                sfx={sfx}
-                sfxSlots={sfxSlots}
-                curSfx={curSfx}
-              />
-            )}
-            {tab === 'patterns' && (
-              <PatternEditor
-                patterns={patterns.patterns}
-                curPattern={patterns.curPattern}
-                setCurPattern={patterns.setCurPattern}
-                isPlaying={patterns.isPlaying}
-                playPos={patterns.playPos}
-                updateChannel={patterns.updateChannel}
-                updateFlags={patterns.updateFlags}
-                playPatterns={patterns.playPatterns}
-                stopPatternPlay={patterns.stopPatternPlay}
-                exportMusic={patterns.exportMusic}
-              />
-            )}
+            {tabContent}
           </div>
+          <TabBar tab={tab} setTab={setTab} bottom />
+        </div>
+      </div>
+    );
+  }
 
+  // ── Landscape / desktop layout: sidebar ──────────────────────────────────────
+  return (
+    <div style={root}>
+      {toolbar}
+
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+
+        {/* Left column */}
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
+                      overflow: 'hidden' }}>
+          {editingColumn}
+
+          {/* Keyboard shortcut hint — only useful if a keyboard is attached */}
+          {!vp.isTouch && (
+            <div style={{ padding: '8px 14px', fontSize: 8, color: '#2a2a2a',
+                          lineHeight: 2, userSelect: 'none', marginTop: 'auto' }}>
+              <span style={{ color: '#3a3a3a' }}>SPACE</span> play ·{' '}
+              <span style={{ color: '#3a3a3a' }}>← →</span> select ·{' '}
+              <span style={{ color: '#3a3a3a' }}>↑↓</span> pitch ·{' '}
+              <span style={{ color: '#3a3a3a' }}>⇧↑↓</span> vol ·{' '}
+              <span style={{ color: '#3a3a3a' }}>DEL</span> off ·{' '}
+              <span style={{ color: '#3a3a3a' }}>TAB</span> wave ·{' '}
+              <span style={{ color: '#3a3a3a' }}>1–8</span> waveform ·{' '}
+              <span style={{ color: '#3a3a3a' }}>[ ]</span> oct {octave} ·{' '}
+              <span style={{ color: '#3a3a3a' }}>Q–P / Z–M</span> piano
+              {midiStatus === 'ready' && (
+                <span style={{ color: '#00E436', marginLeft: 8 }}>● MIDI</span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Right sidebar */}
+        <div style={{ width: 370, flexShrink: 0, borderLeft: '1px solid #1c1c1c',
+                      display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <TabBar tab={tab} setTab={setTab} />
+          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+            {tabContent}
+          </div>
         </div>
       </div>
     </div>

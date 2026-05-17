@@ -2,76 +2,44 @@ import { useRef, useEffect } from 'react';
 import { WAVE_COLS } from '../constants.js';
 import { noteName } from '../utils.js';
 
-const COL_W    = 22;   // px per column
-const COL_H    = 144;  // px total column height
-const HEX_H    = 16;   // px reserved at bottom for hex label
-const BAR_PAD  = 2;    // px left/right inset for the pitch bar
-const BAR_AREA = COL_H - HEX_H;           // 128 px of drawable bar space
-const BAR_W    = COL_W - BAR_PAD * 2;     // 18 px bar width
-
-// Minimum bar height so pitch-0 notes still show a visible sliver
+const COL_W    = 26;   // px — wider for touch comfort (was 22)
+const COL_H    = 144;  // px
+const HEX_H    = 18;   // px
+const BAR_PAD  = 2;
+const BAR_AREA = COL_H - HEX_H;
+const BAR_W    = COL_W - BAR_PAD * 2;
 const MIN_BAR_H = 2;
 
 function barHeight(pitch) {
   return Math.max(MIN_BAR_H, Math.round((pitch / 63) * BAR_AREA));
 }
 
-// ── Styles that never change ──────────────────────────────────────────────────
-
-const scrollWrap = {
-  overflowX: 'auto',
-  overflowY: 'hidden',
-  userSelect: 'none',
-  WebkitUserSelect: 'none',
-};
-
-const row = {
-  display: 'flex',
-  height: COL_H,
-  width: COL_W * 32,
-};
-
 const hexStyle = {
-  position: 'absolute',
-  bottom: 0,
-  left: 0,
-  width: COL_W,
-  height: HEX_H,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  fontSize: 8,
-  fontFamily: 'monospace',
+  position: 'absolute', bottom: 0, left: 0,
+  width: COL_W, height: HEX_H,
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  fontSize: 8, fontFamily: 'monospace',
   pointerEvents: 'none',
 };
 
 const nameStyle = {
-  position: 'absolute',
-  left: 0,
-  width: COL_W,
-  height: 9,
-  textAlign: 'center',
-  fontSize: 7,
-  fontFamily: 'monospace',
-  color: '#FFF1E8',
-  lineHeight: '9px',
-  pointerEvents: 'none',
-  overflow: 'hidden',
+  position: 'absolute', left: 0, width: COL_W,
+  height: 9, textAlign: 'center',
+  fontSize: 7, fontFamily: 'monospace',
+  color: '#FFF1E8', lineHeight: '9px',
+  pointerEvents: 'none', overflow: 'hidden',
 };
 
-// ── Component ─────────────────────────────────────────────────────────────────
-
 export default function NoteGrid({
-  notes,
-  selectedNote,
-  playPos,
-  onNoteClick,
-  onDragPaint,
+  notes, selectedNote, playPos, onNoteClick, onDragPaint,
 }) {
-  // drag.paintOn is the on-value being written for the current drag gesture
-  const drag = useRef({ active: false, paintOn: false });
+  const drag    = useRef({ active: false, paintOn: false });
+  const rowRef  = useRef(null);
+  // cbRef keeps callbacks fresh without re-registering native listeners
+  const cbRef   = useRef({ notes, onNoteClick, onDragPaint });
+  useEffect(() => { cbRef.current = { notes, onNoteClick, onDragPaint }; });
 
-  // Release drag on mouseup anywhere, including outside the grid
+  // ── Mouse drag ──────────────────────────────────────────────────────────────
   useEffect(() => {
     const stop = () => { drag.current.active = false; };
     window.addEventListener('mouseup', stop);
@@ -79,7 +47,7 @@ export default function NoteGrid({
   }, []);
 
   function handleMouseDown(e, i) {
-    e.preventDefault(); // prevent text selection during drag
+    e.preventDefault();
     const paintOn = !notes[i].on;
     drag.current = { active: true, paintOn };
     onNoteClick(i);
@@ -87,77 +55,103 @@ export default function NoteGrid({
   }
 
   function handleMouseEnter(i) {
-    if (drag.current.active) {
-      onDragPaint(i, drag.current.paintOn);
-    }
+    if (drag.current.active) onDragPaint(i, drag.current.paintOn);
   }
 
+  // ── Touch drag (passive:false so preventDefault works) ────────────────────
+  useEffect(() => {
+    const el = rowRef.current;
+    if (!el) return;
+
+    const onStart = (e) => {
+      const col = e.target.closest('[data-idx]');
+      if (!col) return;
+      e.preventDefault(); // stop scroll + long-press context menu
+      const i = parseInt(col.dataset.idx, 10);
+      const { notes, onNoteClick, onDragPaint } = cbRef.current;
+      const paintOn = !notes[i].on;
+      drag.current = { active: true, paintOn };
+      onNoteClick(i);
+      onDragPaint(i, paintOn);
+    };
+
+    const onMove = (e) => {
+      if (!drag.current.active) return;
+      e.preventDefault();
+      const { clientX, clientY } = e.touches[0];
+      const target = document.elementFromPoint(clientX, clientY);
+      const col = target?.closest('[data-idx]');
+      if (col) {
+        cbRef.current.onDragPaint(
+          parseInt(col.dataset.idx, 10),
+          drag.current.paintOn,
+        );
+      }
+    };
+
+    const onEnd = () => { drag.current.active = false; };
+
+    el.addEventListener('touchstart', onStart, { passive: false });
+    el.addEventListener('touchmove',  onMove,  { passive: false });
+    el.addEventListener('touchend',   onEnd);
+
+    return () => {
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove',  onMove);
+      el.removeEventListener('touchend',   onEnd);
+    };
+  }, []); // empty — reads fresh state via cbRef
+
   return (
-    <div style={scrollWrap}>
-      <div style={row}>
+    <div style={{ overflowX: 'auto', overflowY: 'hidden', userSelect: 'none', WebkitUserSelect: 'none' }}>
+      <div
+        ref={rowRef}
+        style={{
+          display: 'flex',
+          height: COL_H,
+          width: COL_W * 32,
+          touchAction: 'none', // hand all touch gestures to our listeners
+        }}
+      >
         {notes.map((note, i) => {
           const isSelected = i === selectedNote;
           const isPlaying  = i === playPos;
           const bh         = barHeight(note.pitch);
-
-          // Column background; playing gets a green tint
-          const colBg = isPlaying ? 'rgba(0,228,54,0.12)' : '#111';
-
-          // Blue inset shadow instead of border-left so layout width stays 22 px
-          const shadow = isSelected ? 'inset 2px 0 0 #29ADFF' : undefined;
-
-          // Bar color: waveform color when on, dark placeholder when off
-          const barColor = note.on ? WAVE_COLS[note.waveform] : '#252525';
-
-          // Note name sits just above the bar; clamped so it never leaves the column
-          const nameBtm = Math.min(HEX_H + bh + 1, COL_H - 10);
+          const colBg      = isPlaying ? 'rgba(0,228,54,0.12)' : '#111';
+          const shadow     = isSelected ? 'inset 2px 0 0 #29ADFF' : undefined;
+          const barColor   = note.on ? WAVE_COLS[note.waveform] : '#252525';
+          const nameBtm    = Math.min(HEX_H + bh + 1, COL_H - 10);
 
           return (
             <div
               key={i}
+              data-idx={i}
               onMouseDown={e => handleMouseDown(e, i)}
               onMouseEnter={() => handleMouseEnter(i)}
               style={{
                 position: 'relative',
-                width: COL_W,
-                height: COL_H,
-                flexShrink: 0,
-                boxSizing: 'border-box',
+                width: COL_W, height: COL_H,
+                flexShrink: 0, boxSizing: 'border-box',
                 backgroundColor: colBg,
                 borderRight: '1px solid #1c1c1c',
                 boxShadow: shadow,
-                overflow: 'hidden',
-                cursor: 'pointer',
+                overflow: 'hidden', cursor: 'pointer',
               }}
             >
-              {/* Pitch bar ───────────────────────────────────────────────── */}
-              <div
-                style={{
-                  position: 'absolute',
-                  bottom: HEX_H,
-                  left: BAR_PAD,
-                  width: BAR_W,
-                  height: bh,
-                  backgroundColor: barColor,
-                  borderRadius: 1,
-                  pointerEvents: 'none',
-                }}
-              />
+              <div style={{
+                position: 'absolute', bottom: HEX_H,
+                left: BAR_PAD, width: BAR_W, height: bh,
+                backgroundColor: barColor, borderRadius: 1,
+                pointerEvents: 'none',
+              }} />
 
-              {/* Note name (only when the note is active) ────────────────── */}
               {note.on && (
                 <span style={{ ...nameStyle, bottom: nameBtm }}>
                   {noteName(note.pitch)}
                 </span>
               )}
 
-              {/* Hex column index ────────────────────────────────────────── */}
-              <span
-                style={{
-                  ...hexStyle,
-                  color: isSelected ? '#29ADFF' : '#5F574F',
-                }}
-              >
+              <span style={{ ...hexStyle, color: isSelected ? '#29ADFF' : '#5F574F' }}>
                 {i.toString(16).padStart(2, '0')}
               </span>
             </div>

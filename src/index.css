@@ -45,3 +45,17 @@ body::after {
 
 /* Firefox */
 * { scrollbar-width: thin; scrollbar-color: #5f574f #1a1c2c; }
+
+/* ── Touch interaction ──────────────────────────────────────────────────────── */
+/* Prevent callout (iOS long-press menu) and text selection across the whole UI */
+* { -webkit-touch-callout: none; }
+
+/* Buttons should never trigger the iOS text magnifier */
+button { touch-action: manipulation; }
+
+/* Safe-area padding for iPad home bar / notch */
+#root {
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left:   env(safe-area-inset-left);
+  padding-right:  env(safe-area-inset-right);
+}
