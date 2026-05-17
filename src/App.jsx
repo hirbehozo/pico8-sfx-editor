@@ -24,6 +24,59 @@ const TABS = [
   { id: 'patterns', label: 'PATTERNS' },
 ];
 
+// ── Rotate prompt ─────────────────────────────────────────────────────────────
+// Shown on touch devices in portrait orientation.
+function RotatePrompt() {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9998,
+      backgroundColor: '#1a1c2c',
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      gap: 36, padding: 32, textAlign: 'center',
+      fontFamily: 'monospace',
+    }}>
+      {/* Device + rotation icon */}
+      <svg
+        width="176" height="76" viewBox="0 0 176 76" fill="none"
+        style={{ animation: 'p8-hint 2.4s ease-in-out infinite' }}
+      >
+        {/* Portrait device — dimmed */}
+        <rect x="10" y="8" width="28" height="50" rx="5"
+              stroke="#3a3a3a" strokeWidth="2"/>
+        <rect x="14" y="13" width="20" height="38" rx="2" fill="#222"/>
+        <circle cx="24" cy="63" r="0" fill="#3a3a3a"/>
+
+        {/* Elliptical arc from portrait (right edge) to landscape (left edge) */}
+        <path d="M 40 33 A 48 24 0 0 1 136 33"
+              stroke="#FFEC27" strokeWidth="2.5" strokeLinecap="round"/>
+
+        {/* Arrowhead pointing down-right at arc end */}
+        <path d="M 130 25 L 136 33 L 144 27"
+              stroke="#FFEC27" strokeWidth="2.5" strokeLinecap="round"
+              strokeLinejoin="round" fill="none"/>
+
+        {/* Landscape device — highlighted */}
+        <rect x="136" y="23" width="30" height="22" rx="5"
+              stroke="#00E436" strokeWidth="2"/>
+        <rect x="140" y="27" width="22" height="14" rx="2" fill="#222"/>
+      </svg>
+
+      <div>
+        <div style={{
+          fontSize: 16, color: '#FFEC27',
+          letterSpacing: 4, marginBottom: 10,
+        }}>
+          ROTATE DEVICE
+        </div>
+        <div style={{ fontSize: 10, color: '#5F574F', lineHeight: 1.8 }}>
+          PICO-8 SFX Editor runs in landscape mode
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── TabBar shared by both layouts ─────────────────────────────────────────────
 function TabBar({ tab, setTab, bottom = false }) {
   return (
@@ -238,27 +291,9 @@ export default function App() {
                  overflow: 'hidden', backgroundColor: '#111', color: '#C2C3C7',
                  fontFamily: 'monospace' };
 
-  // ── Portrait layout (compact or tall): vertical stack, bottom tab bar ────────
-  if (vp.isCompact) {
-    return (
-      <div style={root}>
-        {toolbar}
-
-        {/* Scrollable top section: waveform + grid + piano */}
-        <div style={{ flexShrink: 0, overflow: 'hidden' }}>
-          {editingColumn}
-        </div>
-
-        {/* Bottom panel: tab bar at bottom edge, content above it */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column',
-                      overflow: 'hidden', minHeight: 0 }}>
-          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-            {tabContent}
-          </div>
-          <TabBar tab={tab} setTab={setTab} bottom />
-        </div>
-      </div>
-    );
+  // ── Touch + portrait → rotate prompt ────────────────────────────────────────
+  if (vp.isTouch && !vp.isLandscape) {
+    return <RotatePrompt />;
   }
 
   // ── Landscape / desktop layout: sidebar ──────────────────────────────────────
