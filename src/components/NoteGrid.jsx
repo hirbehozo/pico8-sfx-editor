@@ -120,7 +120,7 @@ export default function NoteGrid({
           const colBg      = isPlaying ? 'rgba(0,228,54,0.12)' : '#111';
           const shadow     = isSelected ? 'inset 2px 0 0 #29ADFF' : undefined;
           const barColor   = note.on ? WAVE_COLS[note.waveform] : '#252525';
-          const nameBtm    = Math.min(HEX_H + bh + 1, COL_H - 10);
+          const nameBtm    = Math.min(HEX_H + bh + 1, rowHeight - 10);
 
           return (
             <div
