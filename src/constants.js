@@ -1,5 +1,40 @@
 const CHROMATIC = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
+// ── Scale / mode definitions ──────────────────────────────────────────────────
+// Each value is an array of semitone intervals from the root.
+
+export const KEY_NAMES = CHROMATIC; // alias for UI
+
+export const MODES = {
+  chromatic:     [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+  major:         [0, 2, 4, 5, 7, 9, 11],         // Ionian
+  minor:         [0, 2, 3, 5, 7, 8, 10],          // Aeolian
+  dorian:        [0, 2, 3, 5, 7, 9, 10],
+  phrygian:      [0, 1, 3, 5, 7, 8, 10],
+  lydian:        [0, 2, 4, 6, 7, 9, 11],
+  mixolydian:    [0, 2, 4, 5, 7, 9, 10],
+  locrian:       [0, 1, 3, 5, 6, 8, 10],
+  pentatonicMaj: [0, 2, 4, 7, 9],
+  pentatonicMin: [0, 3, 5, 7, 10],
+  blues:         [0, 3, 5, 6, 7, 10],
+  wholeTone:     [0, 2, 4, 6, 8, 10],
+};
+
+export const MODE_LABELS = {
+  chromatic:     'Chromatic',
+  major:         'Major',
+  minor:         'Minor',
+  dorian:        'Dorian',
+  phrygian:      'Phrygian',
+  lydian:        'Lydian',
+  mixolydian:    'Mixolydian',
+  locrian:       'Locrian',
+  pentatonicMaj: 'Penta Maj',
+  pentatonicMin: 'Penta Min',
+  blues:         'Blues',
+  wholeTone:     'Whole Tone',
+};
+
 // 64 pitches: C1 (pitch 0) through D#6 (pitch 63)
 export const NOTE_NAMES = Array.from({ length: 64 }, (_, i) => {
   const octave = Math.floor(i / 12) + 1;

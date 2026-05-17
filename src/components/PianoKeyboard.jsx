@@ -6,7 +6,8 @@ const WHITE_IDX = { 0:0, 2:1, 4:2, 5:3, 7:4, 9:5, 11:6 };
 const BLACK_OFF = { 1:0.65, 3:1.65, 6:3.65, 8:4.65, 10:5.65 };
 
 // keyW / keyH let the caller scale keys for touch (default = desktop size)
-export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH = 64 }) {
+// validNotes: Set<0-11> of in-scale chromatic indices, or null for chromatic (no dim)
+export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH = 64, validNotes = null }) {
   const blackW = Math.round(keyW * 0.6);
   const blackH = Math.round(keyH * 0.62);
 
@@ -48,7 +49,9 @@ export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH
       <div style={{ position: 'relative', width: containerW, height: keyH }}>
 
         {/* White keys ─────────────────────────────────────────────────────── */}
-        {whites.map(({ pitch, left, active, label }) => (
+        {whites.map(({ pitch, left, active, label }) => {
+          const inScale = !validNotes || validNotes.has(pitch % 12);
+          return (
           <div
             key={pitch}
             onClick={() => onKeyPress(pitch)}
@@ -58,8 +61,9 @@ export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH
               width: keyW, height: keyH,
               boxSizing: 'border-box',
               border: '1px solid #3a3a3a',
-              backgroundColor: active ? P8[10] : P8[7],
+              backgroundColor: active ? P8[10] : inScale ? P8[7] : '#9a9b9f',
               cursor: 'pointer',
+              opacity: inScale ? 1 : 0.55,
             }}
           >
             {label && (
@@ -75,10 +79,13 @@ export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH
               </span>
             )}
           </div>
-        ))}
+          );
+        })}
 
         {/* Black keys ─────────────────────────────────────────────────────── */}
-        {blacks.map(({ pitch, left, active }) => (
+        {blacks.map(({ pitch, left, active }) => {
+          const inScale = !validNotes || validNotes.has(pitch % 12);
+          return (
           <div
             key={pitch}
             onClick={() => onKeyPress(pitch)}
@@ -89,11 +96,13 @@ export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH
               boxSizing: 'border-box',
               border: '1px solid #000',
               borderRadius: '0 0 3px 3px',
-              backgroundColor: active ? P8[9] : P8[1],
+              backgroundColor: active ? P8[9] : inScale ? P8[1] : '#2a2a2a',
               zIndex: 1, cursor: 'pointer',
+              opacity: inScale ? 1 : 0.45,
             }}
           />
-        ))}
+          );
+        })}
 
       </div>
     </div>

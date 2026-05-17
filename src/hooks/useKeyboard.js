@@ -36,6 +36,9 @@ export function useKeyboard({
   updateNote,
   playSfx,
   stopPlay,
+  // Scale helpers — identity defaults keep the hook backwards-compatible
+  snapPitch  = p => p,
+  nextPitch  = (p, dir) => Math.max(0, Math.min(63, p + dir)),
 }) {
   const [octave, setOctave] = useState(3); // default base octave → Q=C3
 
@@ -43,7 +46,8 @@ export function useKeyboard({
   // re-register (empty dep array), yet always reads fresh values.
   const live = useRef({});
   live.current = { selectedNote, sfx, isPlaying, octave,
-                   setSelectedNote, updateNote, playSfx, stopPlay };
+                   setSelectedNote, updateNote, playSfx, stopPlay,
+                   snapPitch, nextPitch };
 
   useEffect(() => {
     const onKeyDown = (e) => {
@@ -56,6 +60,7 @@ export function useKeyboard({
       const {
         selectedNote, sfx, isPlaying, octave,
         setSelectedNote, updateNote, playSfx, stopPlay,
+        snapPitch, nextPitch,
       } = live.current;
 
       const note  = sfx.notes[selectedNote];
@@ -67,11 +72,11 @@ export function useKeyboard({
       const preview = (pitch) =>
         audioEngine.synthNote(pitch, note.waveform, note.volume || 1, 0, PREVIEW_DUR);
 
-      // Enter a piano note: set pitch + on, preview, advance cursor
-      const enterNote = (pitch) => {
-        const clamped = Math.max(0, Math.min(63, pitch));
-        updateNote(selectedNote, { pitch: clamped, on: true });
-        preview(clamped);
+      // Enter a piano note: snap to scale, set pitch + on, preview, advance cursor
+      const enterNote = (rawPitch) => {
+        const pitch = snapPitch(Math.max(0, Math.min(63, rawPitch)));
+        updateNote(selectedNote, { pitch, on: true });
+        preview(pitch);
         setSelectedNote(Math.min(selectedNote + 1, 31));
       };
 
@@ -90,7 +95,7 @@ export function useKeyboard({
           if (shift) {
             updateNote(selectedNote, { volume: Math.min(7, note.volume + 1) });
           } else {
-            const p = Math.min(63, note.pitch + 1);
+            const p = nextPitch(note.pitch, 1); // skips non-scale notes
             updateNote(selectedNote, { pitch: p });
             preview(p);
           }
@@ -101,7 +106,7 @@ export function useKeyboard({
           if (shift) {
             updateNote(selectedNote, { volume: Math.max(0, note.volume - 1) });
           } else {
-            const p = Math.max(0, note.pitch - 1);
+            const p = nextPitch(note.pitch, -1); // skips non-scale notes
             updateNote(selectedNote, { pitch: p });
             preview(p);
           }

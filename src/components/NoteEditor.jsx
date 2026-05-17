@@ -102,7 +102,7 @@ const wrap = {
   backgroundColor: '#0d0d0d',
 };
 
-export default function NoteEditor({ note, noteIndex, onUpdate }) {
+export default function NoteEditor({ note, noteIndex, onUpdate, nextPitch = null }) {
   if (noteIndex == null || !note) {
     return (
       <div style={{
@@ -123,7 +123,14 @@ export default function NoteEditor({ note, noteIndex, onUpdate }) {
   const preview = (pitch, waveform) =>
     audioEngine.synthNote(pitch, waveform, Math.max(note.volume, 1), 0, PREVIEW_DUR);
 
-  const handlePitchChange = (pitch) => {
+  // When a scale is active, stepping ◀ or ▶ should jump to the next in-scale pitch
+  // rather than stopping at every semitone.
+  const handlePitchChange = (raw) => {
+    let pitch = raw;
+    if (nextPitch && raw !== note.pitch) {
+      const dir = raw > note.pitch ? 1 : -1;
+      pitch = nextPitch(note.pitch, dir);
+    }
     onUpdate({ pitch });
     preview(pitch, note.waveform);
   };

@@ -5,10 +5,11 @@ import { useKeyboard }    from './hooks/useKeyboard.js';
 import { useMidi }        from './hooks/useMidi.js';
 import { usePatterns }    from './hooks/usePatterns.js';
 import { useViewport }    from './hooks/useViewport.js';
-import { mkNote }         from './utils.js';
+import { mkNote, buildScaleNotes, snapToScale, nextScalePitch } from './utils.js';
 import { audioEngine }    from './audio.js';
 
 import Toolbar         from './components/Toolbar.jsx';
+import ScaleSelector   from './components/ScaleSelector.jsx';
 import NoteGrid        from './components/NoteGrid.jsx';
 import NoteEditor      from './components/NoteEditor.jsx';
 import PianoKeyboard   from './components/PianoKeyboard.jsx';
@@ -114,7 +115,8 @@ function TabBar({ tab, setTab, bottom = false }) {
 
 // ── TabContent shared by both layouts ─────────────────────────────────────────
 function TabContent({ tab, sfx, sfxSlots, curSfx, selectedNote, savedTakes,
-                      updateNote, loadTake, deleteTake, patterns, previewTake }) {
+                      updateNote, loadTake, deleteTake, patterns, previewTake,
+                      nextPitch }) {
   return (
     <>
       {tab === 'edit' && (
@@ -122,6 +124,7 @@ function TabContent({ tab, sfx, sfxSlots, curSfx, selectedNote, savedTakes,
           note={sfx.notes[selectedNote]}
           noteIndex={selectedNote}
           onUpdate={patch => updateNote(selectedNote, patch)}
+          nextPitch={nextPitch}
         />
       )}
       {tab === 'takes' && (
@@ -159,6 +162,15 @@ export default function App() {
   const [tab, setTab] = useState('edit');
   const vp = useViewport();
 
+  // ── Scale / mode ────────────────────────────────────────────────────────────
+  const [scaleKey,  setScaleKey]  = useState(0);           // 0 = C
+  const [scaleMode, setScaleMode] = useState('chromatic');
+  const validNotes = buildScaleNotes(scaleKey, scaleMode); // Set<0-11>
+
+  // Scale helper callbacks — passed to useKeyboard, NoteEditor, PianoKeyboard
+  const snapPitch  = p => snapToScale(p, validNotes);
+  const nextPitch  = (p, dir) => nextScalePitch(p, dir, validNotes);
+
   // Piano key sizes — larger on touch devices for comfortable tapping
   const keyW = vp.isTouch ? 30 : 22;
   const keyH = vp.isTouch ? 76 : 64;
@@ -186,6 +198,7 @@ export default function App() {
   const { octave } = useKeyboard({
     selectedNote, sfx, isPlaying,
     setSelectedNote, updateNote, playSfx, stopPlay,
+    snapPitch, nextPitch,
   });
 
   // ── MIDI ────────────────────────────────────────────────────────────────────
@@ -194,11 +207,15 @@ export default function App() {
   useEffect(() => { noteRef.current = note;         }, [note]);
   useEffect(() => { selRef.current  = selectedNote; }, [selectedNote]);
 
+  const snapRef = useRef(snapPitch);
+  useEffect(() => { snapRef.current = snapPitch; }, [snapPitch]);
+
   const onMidiNote = useCallback(pitch => {
-    const idx = selRef.current;
-    const n   = noteRef.current;
-    updateNote(idx, { pitch, on: true });
-    audioEngine.synthNote(pitch, n.waveform, n.volume || 5, 0, 0.3);
+    const idx      = selRef.current;
+    const n        = noteRef.current;
+    const snapped  = snapRef.current(pitch);   // honour active scale
+    updateNote(idx, { pitch: snapped, on: true });
+    audioEngine.synthNote(snapped, n.waveform, n.volume || 5, 0, 0.3);
     setSelectedNote(prev => Math.min(prev + 1, 31));
   }, [updateNote, setSelectedNote]);
 
@@ -231,10 +248,11 @@ export default function App() {
 
   // ── Piano key press ─────────────────────────────────────────────────────────
   const handlePianoKey = useCallback(pitch => {
-    const idx = selRef.current;
-    const n   = noteRef.current;
-    updateNote(idx, { pitch, on: true });
-    audioEngine.synthNote(pitch, n.waveform, n.volume || 5, 0, 0.3);
+    const idx     = selRef.current;
+    const n       = noteRef.current;
+    const snapped = snapRef.current(pitch);    // snap to active scale
+    updateNote(idx, { pitch: snapped, on: true });
+    audioEngine.synthNote(snapped, n.waveform, n.volume || 5, 0, 0.3);
     setSelectedNote(prev => Math.min(prev + 1, 31));
   }, [updateNote, setSelectedNote]);
 
@@ -255,6 +273,15 @@ export default function App() {
   // ── Shared editing column ───────────────────────────────────────────────────
   const editingColumn = (
     <>
+      {/* Scale / key selector — spans full width above grid */}
+      <ScaleSelector
+        scaleKey={scaleKey}
+        scaleMode={scaleMode}
+        validNotes={validNotes}
+        onKeyChange={setScaleKey}
+        onModeChange={setScaleMode}
+      />
+
       <div style={{ padding: '8px 12px', borderBottom: '1px solid #1c1c1c', flexShrink: 0 }}>
         <WaveformDisplay currentWaveform={note.waveform} />
       </div>
@@ -273,6 +300,7 @@ export default function App() {
           onKeyPress={handlePianoKey}
           keyW={keyW}
           keyH={keyH}
+          validNotes={validNotes}
         />
       </div>
     </>
@@ -284,6 +312,7 @@ export default function App() {
       selectedNote={selectedNote} savedTakes={savedTakes}
       updateNote={updateNote} loadTake={loadTake} deleteTake={deleteTake}
       patterns={patterns} previewTake={previewTake}
+      nextPitch={nextPitch}
     />
   );
 
