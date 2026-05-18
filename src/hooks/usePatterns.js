@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import * as Tone from 'tone';
 import { audioEngine } from '../audio.js';
 
 const MAX_SEQ_STEPS = 200; // cap prevents infinite-loop hangs in the scheduler
@@ -78,9 +79,6 @@ export function usePatterns(sfxSlots) {
   const patternsRef     = useRef(patterns);
   const sfxSlotsRef     = useRef(sfxSlots);
   const curPatternRef   = useRef(curPattern);
-  const playTimersRef   = useRef([]);
-  const stopRef         = useRef(false);
-  // Mute check is a ref so note callbacks can read the latest value mid-playback
   const muteCheckRef    = useRef(() => false);
 
   useEffect(() => { patternsRef.current   = patterns;   }, [patterns]);
@@ -100,22 +98,24 @@ export function usePatterns(sfxSlots) {
     return () => clearTimeout(id);
   }, [patterns]);
 
-  // Cleanup on unmount
+  // Stop Transport and audio on unmount
   useEffect(() => () => {
-    playTimersRef.current.forEach(clearTimeout);
+    const t = Tone.getTransport();
+    t.stop();
+    t.cancel();
     audioEngine.stopAll();
   }, []);
 
   // ── Mutations ────────────────────────────────────────────────────────────────
 
   const toggleMute = useCallback((ci) => {
-    setSoloChannel(null); // clear solo when manually muting
+    setSoloChannel(null);
     setMutedChannels(prev => prev.map((m, i) => i === ci ? !m : m));
   }, []);
 
   const toggleSolo = useCallback((ci) => {
     setSoloChannel(prev => prev === ci ? null : ci);
-    setMutedChannels([false, false, false, false]); // reset individual mutes on solo
+    setMutedChannels([false, false, false, false]);
   }, []);
 
   const updateChannel = useCallback((patIdx, chIdx, sfxIdx) => {
@@ -139,21 +139,102 @@ export function usePatterns(sfxSlots) {
   // ── Playback ─────────────────────────────────────────────────────────────────
 
   const stopPatternPlay = useCallback(() => {
-    stopRef.current = true;
-    playTimersRef.current.forEach(clearTimeout);
-    playTimersRef.current = [];
+    const transport = Tone.getTransport();
+    transport.stop();
+    transport.cancel();
     audioEngine.stopAll();
     setIsPlaying(false);
     setPlayPos(-1);
     setNotePos(-1);
   }, []);
 
-  const playPatterns = useCallback((startIdx) => {
-    const start    = startIdx ?? curPatternRef.current;
-    stopRef.current = false;
-    playTimersRef.current.forEach(clearTimeout);
-    playTimersRef.current = [];
+  // Play one pattern on repeat until stopPatternPlay is called.
+  // Every step fires a callback that reads live SFX state — so notes painted
+  // while playing are heard on the very next loop pass.
+  const playLoop = useCallback(async (patIdx) => {
+    const idx = patIdx ?? curPatternRef.current;
+    const transport = Tone.getTransport();
+    transport.stop();
+    transport.cancel();
     audioEngine.stopAll();
+
+    await Tone.start();
+    setIsPlaying(true);
+
+    const pats     = patternsRef.current;
+    const sfxSlots = sfxSlotsRef.current;
+    const pat      = pats[idx];
+
+    // Use first active channel's speed + length for the master loop duration.
+    let speed = 16;
+    let masterLength = 32;
+    for (let ci = 0; ci < pat.channels.length; ci++) {
+      const sfx = sfxSlots[pat.channels[ci] ?? ci];
+      if (sfx) { speed = sfx.speed; masterLength = sfx.length ?? 32; break; }
+    }
+    const noteDur = speed / 60;
+    const patDur  = noteDur * masterLength;
+
+    setPlayPos(idx);
+
+    // Note-position ticks (drive the progress bar; repeat each loop)
+    for (let ni = 0; ni < masterLength; ni++) {
+      const ni_ = ni;
+      transport.schedule(() => setNotePos(ni_), ni_ * noteDur);
+    }
+
+    // Schedule one callback per step per channel — reads live SFX state on each fire.
+    pat.channels.forEach((sfxIdx, ci) => {
+      const sfxIndex = sfxIdx ?? ci;
+      const sfx = sfxSlots[sfxIndex];
+      if (!sfx) return;
+      const dur = sfx.speed / 60;
+      const chLength = sfx.length ?? 32;
+
+      for (let ni = 0; ni < chLength; ni++) {
+        const ni_ = ni;
+        transport.schedule((audioTime) => {
+          if (muteCheckRef.current(ci)) return;
+          const liveSfx   = sfxSlotsRef.current[sfxIndex];
+          const liveNote  = liveSfx.notes[ni_];
+          if (!liveNote.on) return;
+          const prev       = ni_ > 0 ? liveSfx.notes[ni_ - 1] : liveNote;
+          const arpPitches = [0, 1, 2, 3].map(o =>
+            liveSfx.notes[Math.min(ni_ + o, 31)].pitch,
+          );
+          const customWave = liveNote.waveform >= 8 && liveNote.waveform <= 15
+            ? (() => {
+                const ws = sfxSlotsRef.current[liveNote.waveform - 8];
+                return ws?.wavetable
+                  ? audioEngine.getOrBuildWave(liveNote.waveform - 8, ws.samples ?? new Array(64).fill(0))
+                  : null;
+              })()
+            : null;
+          audioEngine.synthNote(
+            liveNote.pitch, liveNote.waveform, liveNote.volume, liveNote.effect,
+            dur, prev.pitch, ci, audioTime, arpPitches, prev.volume, customWave,
+          );
+        }, ni_ * dur);
+      }
+    });
+
+    // Loop the transport over the master pattern duration
+    transport.loop = true;
+    transport.loopStart = 0;
+    transport.loopEnd = patDur;
+
+    transport.start();
+  }, []);
+
+  const playPatterns = useCallback(async (startIdx) => {
+    const start = startIdx ?? curPatternRef.current;
+    const transport = Tone.getTransport();
+    transport.stop();
+    transport.cancel();
+    transport.loop = false;
+    audioEngine.stopAll();
+
+    await Tone.start();
 
     const pats     = patternsRef.current;
     const sfxSlots = sfxSlotsRef.current;
@@ -162,76 +243,67 @@ export function usePatterns(sfxSlots) {
 
     setIsPlaying(true);
 
-    // ids is both the local array AND playTimersRef.current (same reference),
-    // so note timeouts added inside pattern callbacks are also tracked.
-    const ids = [];
-    playTimersRef.current = ids;
-
-    let delayMs = 0;
+    let timeOffset = 0; // cumulative seconds from transport start
 
     for (const patIdx of seq) {
       const pat = pats[patIdx];
 
-      // Use the first active channel's SFX speed for pattern duration.
-      // Null channel → fall back to SFX index = channel index (0–3),
-      // mirroring the effectiveChannels logic in the NoteGrid display.
       let speed = 16;
+      let masterLength = 32;
       for (let ci = 0; ci < pat.channels.length; ci++) {
         const sfx = sfxSlots[pat.channels[ci] ?? ci];
-        if (sfx) { speed = sfx.speed; break; }
+        if (sfx) { speed = sfx.speed; masterLength = sfx.length ?? 32; break; }
       }
-      const noteDurMs = Math.round(speed / 60 * 1000);
-      const patMs     = noteDurMs * 32;
-      const atMs      = delayMs;
+      const noteDur = speed / 60;
+      const patDur  = noteDur * masterLength;
+      const atTime  = timeOffset;
 
-      // Note-position ticker: fires once per note step so the UI progress bar updates
-      for (let ni = 0; ni < 32; ni++) {
+      // Pattern-position and note-position ticks
+      transport.schedule(() => setPlayPos(patIdx), atTime);
+      for (let ni = 0; ni < masterLength; ni++) {
         const ni_ = ni;
-        ids.push(setTimeout(() => {
-          if (stopRef.current) return;
-          setNotePos(ni_);
-        }, atMs + ni_ * noteDurMs));
+        transport.schedule(() => setNotePos(ni_), atTime + ni_ * noteDur);
       }
 
-      const patId = setTimeout(() => {
-        if (stopRef.current) return;
-        setPlayPos(patIdx);
+      // Schedule one callback per step per channel — reads live SFX state on fire.
+      pat.channels.forEach((sfxIdx, ci) => {
+        const sfxIndex = sfxIdx ?? ci;
+        const sfx = sfxSlots[sfxIndex];
+        if (!sfx) return;
+        const dur = sfx.speed / 60;
+        const chLength = sfx.length ?? 32;
 
-        // Schedule every note of every active channel simultaneously.
-        // muteCheckRef lets mute/solo changes take effect on the next note,
-        // even mid-playback, without re-scheduling the entire sequence.
-        pat.channels.forEach((sfxIdx, ci) => {
-          const sfx = sfxSlots[sfxIdx ?? ci]; // null → SFX ci, matches NoteGrid display
-          if (!sfx) return;
-          const noteDur = sfx.speed / 60;
+        for (let ni = 0; ni < chLength; ni++) {
+          const ni_ = ni;
+          transport.schedule((audioTime) => {
+            if (muteCheckRef.current(ci)) return;
+            const liveSfx   = sfxSlotsRef.current[sfxIndex];
+            const liveNote  = liveSfx.notes[ni_];
+            if (!liveNote.on) return;
+            const prev       = ni_ > 0 ? liveSfx.notes[ni_ - 1] : liveNote;
+            const arpPitches = [0, 1, 2, 3].map(o =>
+              liveSfx.notes[Math.min(ni_ + o, 31)].pitch,
+            );
+            audioEngine.synthNote(
+              liveNote.pitch, liveNote.waveform, liveNote.volume, liveNote.effect,
+              dur, prev.pitch, ci, audioTime, arpPitches, prev.volume,
+            );
+          }, atTime + ni_ * dur);
+        }
+      });
 
-          sfx.notes.forEach((note, ni) => {
-            if (!note.on) return;
-            const noteId = setTimeout(() => {
-              if (stopRef.current) return;
-              if (muteCheckRef.current(ci)) return; // honour mute/solo
-              audioEngine.synthNote(
-                note.pitch, note.waveform, note.volume, note.effect, noteDur,
-                ni > 0 ? sfx.notes[ni - 1].pitch : note.pitch,
-              );
-            }, Math.round(ni * noteDur * 1000));
-            ids.push(noteId);
-          });
-        });
-      }, atMs);
-      ids.push(patId);
-
-      delayMs += patMs;
+      timeOffset += patDur;
     }
 
     // End of sequence
-    ids.push(setTimeout(() => {
-      if (stopRef.current) return;
+    transport.schedule(() => {
       audioEngine.stopAll();
       setIsPlaying(false);
       setPlayPos(-1);
       setNotePos(-1);
-    }, delayMs));
+    }, timeOffset);
+
+    transport.start();
   }, []);
 
   // ── Export ───────────────────────────────────────────────────────────────────
@@ -245,7 +317,7 @@ export function usePatterns(sfxSlots) {
     isPlaying, playPos, notePos,
     mutedChannels, soloChannel, toggleMute, toggleSolo,
     updateChannel, updateFlags,
-    playPatterns, stopPatternPlay,
+    playPatterns, playLoop, stopPatternPlay,
     exportMusic,
   };
 }

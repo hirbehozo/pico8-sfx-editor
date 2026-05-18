@@ -28,8 +28,29 @@ export function mkSfx() {
     speed: 16,
     loopStart: 0,
     loopEnd: 0,
+    length: 32,
+    wavetable: false,
+    samples: new Array(64).fill(0), // signed amplitude −7..+7 for waveform instrument mode
     notes: Array.from({ length: 32 }, mkNote),
   };
+}
+
+// Default drum groove for SFX slot 3 (DRUMS channel).
+// 32 16th-note steps, 2 bars of 4/4.
+// Pitches: C1=0, C2=12, C3=24, C5=48
+export function mkDrumSfx() {
+  const K = () => ({ pitch: 0,  waveform: 0, volume: 7, effect: 3, on: true });  // kick
+  const S = () => ({ pitch: 24, waveform: 6, volume: 6, effect: 5, on: true });  // snare
+  const H = () => ({ pitch: 48, waveform: 6, volume: 3, effect: 5, on: true });  // hat
+  const T = () => ({ pitch: 12, waveform: 3, volume: 6, effect: 3, on: true });  // tom
+  const _ = mkNote;                                                                // rest
+  const notes = [
+  // 0    1   2   3    4   5   6   7    8   9   10  11   12  13  14  15
+    K(), _(), H(), _(), S(), _(), H(), _(), K(), _(), H(), _(), S(), _(), T(), _(),
+  // 16   17  18  19   20  21  22  23   24  25  26  27   28  29  30  31
+    K(), _(), H(), _(), S(), _(), H(), _(), K(), _(), H(), _(), S(), _(), T(), _(),
+  ];
+  return { ...mkSfx(), notes };
 }
 
 // Serialize a note to its 5-character PICO-8 hex representation:
@@ -73,10 +94,31 @@ export function nextScalePitch(pitch, dir, validNotes) {
 
 // ── SFX serialisation ─────────────────────────────────────────────────────────
 
-// Serialize an entire SFX to its PICO-8 string format
+// Serialize an entire SFX to its PICO-8 string format (168 hex chars).
+// If sfx.length < 32, the active notes are tiled to fill all 32 slots.
+// If sfx.wavetable is true, encodes the 64-sample waveform instead of notes.
+// ⚠ Waveform encoding (editor_mode byte + sample layout) is a best-guess —
+//   verify against a real .p8 file before shipping (see PICO8_AUDIO_FEATURES.md).
 export function sfxToHex(sfx) {
-  const header =
-    hex2(sfx.speed) + hex2(sfx.loopStart) + hex2(sfx.loopEnd);
-  const body = sfx.notes.map(noteToHex).join('');
-  return header + body;
+  const header = (sfx.wavetable
+    ? '02'   // editor_mode = 02 = waveform instrument (unverified)
+    : '00')  // editor_mode = 00 = pitch mode
+    + hex2(sfx.speed) + hex2(sfx.loopStart) + hex2(sfx.loopEnd);
+
+  if (sfx.wavetable) {
+    const samples = sfx.samples ?? new Array(64).fill(0);
+    // Pack two 4-bit amplitude values (−7..+7 → 0..14) into each note's pitch byte.
+    // 32 notes × 2 samples = 64 samples total. Instrument/vol/effect bytes = 0.
+    const noteHex = Array.from({ length: 32 }, (_, i) => {
+      const a = Math.max(-7, Math.min(7, samples[i * 2]     ?? 0)) + 7; // 0-14
+      const b = Math.max(-7, Math.min(7, samples[i * 2 + 1] ?? 0)) + 7;
+      return hex2((a << 4) | b) + '000';
+    }).join('');
+    return header + noteHex;
+  }
+
+  const seqLen = sfx.length ?? 32;
+  const active = sfx.notes.slice(0, seqLen);
+  const notes32 = Array.from({ length: 32 }, (_, i) => active[i % seqLen]);
+  return header + notes32.map(noteToHex).join('');
 }

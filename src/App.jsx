@@ -5,13 +5,15 @@ import { useKeyboard }    from './hooks/useKeyboard.js';
 import { useMidi }        from './hooks/useMidi.js';
 import { usePatterns }    from './hooks/usePatterns.js';
 import { useViewport }    from './hooks/useViewport.js';
-import { mkNote, buildScaleNotes, snapToScale, nextScalePitch } from './utils.js';
-import { CH_ROLES, CH_COLORS } from './constants.js';
+import { mkNote, noteName, buildScaleNotes, snapToScale, nextScalePitch } from './utils.js';
+import { CH_ROLES, CH_COLORS, DRUM_NAMES } from './constants.js';
+import * as Tone from 'tone';
 import { audioEngine }    from './audio.js';
 
 import Toolbar         from './components/Toolbar.jsx';
 import ScaleSelector   from './components/ScaleSelector.jsx';
 import NoteGrid        from './components/NoteGrid.jsx';
+import WavetableEditor from './components/WavetableEditor.jsx';
 import NoteEditor      from './components/NoteEditor.jsx';
 import PianoKeyboard   from './components/PianoKeyboard.jsx';
 import TakesList       from './components/TakesList.jsx';
@@ -235,7 +237,8 @@ function TabBar({ tab, setTab, bottom = false, isTouch = false }) {
 // ── TabContent shared by both layouts ─────────────────────────────────────────
 function TabContent({ tab, sfx, sfxSlots, curSfx, selectedNote, savedTakes,
                       updateNote, loadTake, deleteTake, patterns, previewTake,
-                      nextPitch, isTouch = false, onSelectSfx }) {
+                      nextPitch, isTouch = false, onSelectSfx, activeChannelIdx = -1,
+                      wavetableActive = [], getCustomWave = null }) {
   return (
     <>
       {tab === 'edit' && (
@@ -245,6 +248,9 @@ function TabContent({ tab, sfx, sfxSlots, curSfx, selectedNote, savedTakes,
           onUpdate={patch => updateNote(selectedNote, patch)}
           nextPitch={nextPitch}
           isTouch={isTouch}
+          channel={activeChannelIdx}
+          wavetableActive={wavetableActive}
+          getCustomWave={getCustomWave}
         />
       )}
       {tab === 'takes' && (
@@ -319,7 +325,8 @@ export default function App() {
   const {
     sfxSlots, curSfx, selectedNote, isPlaying, playPos, savedTakes,
     updateNote, updateAnyNote, updateSfxField, setCurSfx, setSelectedNote,
-    playSfx, stopPlay, saveTake, loadTake, deleteTake, exportSingle,
+    playSfx, stopPlay, toggleWavetable, updateSample,
+    saveTake, loadTake, deleteTake, exportSingle, resetTracks,
   } = useSfxEditor();
 
   const sfx  = sfxSlots[curSfx];
@@ -329,7 +336,7 @@ export default function App() {
 
   // ── AudioContext priming (must happen inside a user gesture) ────────────────
   useEffect(() => {
-    const prime = () => audioEngine.getCtx();
+    const prime = () => Tone.start();
     document.addEventListener('pointerdown', prime, { once: true });
     return () => document.removeEventListener('pointerdown', prime);
   }, []);
@@ -350,27 +357,40 @@ export default function App() {
     selectedNote, sfx,
     isPlaying:  patterns.isPlaying,
     setSelectedNote, updateNote,
-    playSfx:   () => patterns.playPatterns(),
+    playSfx:   async () => { patterns.playLoop(patterns.curPattern); },
     stopPlay:  patterns.stopPatternPlay,
     snapPitch, nextPitch,
   });
 
   // ── MIDI ────────────────────────────────────────────────────────────────────
-  const noteRef    = useRef(note);
-  const selRef     = useRef(selectedNote);
-  useEffect(() => { noteRef.current = note;         }, [note]);
-  useEffect(() => { selRef.current  = selectedNote; }, [selectedNote]);
+  const noteRef            = useRef(note);
+  const selRef             = useRef(selectedNote);
+  const activeChRef        = useRef(-1); // updated below after activeChannelIdx is computed
+  const patternPlayingRef  = useRef(patterns.isPlaying);
+  const notePosRef         = useRef(patterns.notePos);
+  const sfxLengthRef       = useRef(sfx.length ?? 32);
+  useEffect(() => { noteRef.current           = note;                 }, [note]);
+  useEffect(() => { selRef.current            = selectedNote;         }, [selectedNote]);
+  useEffect(() => { patternPlayingRef.current = patterns.isPlaying;   }, [patterns.isPlaying]);
+  useEffect(() => { notePosRef.current        = patterns.notePos;     }, [patterns.notePos]);
+  useEffect(() => { sfxLengthRef.current      = sfx.length ?? 32;    }, [sfx.length]);
 
   const snapRef = useRef(snapPitch);
   useEffect(() => { snapRef.current = snapPitch; }, [snapPitch]);
 
   const onMidiNote = useCallback(pitch => {
-    const idx      = selRef.current;
-    const n        = noteRef.current;
-    const snapped  = snapRef.current(pitch);   // honour active scale
-    updateNote(idx, { pitch: snapped, on: true });
-    audioEngine.synthNote(snapped, n.waveform, n.volume || 5, 0, 0.3);
-    setSelectedNote(prev => Math.min(prev + 1, 31));
+    const n       = noteRef.current;
+    const snapped = snapRef.current(pitch);
+    audioEngine.synthNote(snapped, n.waveform, n.volume || 5, 0, 0.3, snapped, activeChRef.current);
+    if (patternPlayingRef.current) {
+      // Live mode: quantize to the next step boundary
+      const length   = sfxLengthRef.current;
+      const nextStep = (notePosRef.current + 1) % length;
+      updateNote(nextStep, { pitch: snapped, on: true });
+    } else {
+      updateNote(selRef.current, { pitch: snapped, on: true });
+      setSelectedNote(prev => Math.min(prev + 1, 31));
+    }
   }, [updateNote, setSelectedNote]);
 
   const { midiStatus } = useMidi(onMidiNote);
@@ -380,9 +400,8 @@ export default function App() {
     navigator.clipboard.writeText(exportSingle()).catch(() => {});
 
   const handleClear = () => {
-    const hex = curSfx.toString(16).padStart(2, '0').toUpperCase();
-    if (window.confirm(`Clear all notes in SFX ${hex}?`))
-      updateSfxField({ notes: Array.from({ length: 32 }, mkNote) });
+    if (window.confirm('Clear all 4 tracks and restore the default drum groove?'))
+      resetTracks();
   };
 
   // ── Take preview ─────────────────────────────────────────────────────────
@@ -392,9 +411,11 @@ export default function App() {
     s.notes.forEach((n, i) => {
       if (!n.on) return;
       setTimeout(() => {
+        const prev       = i > 0 ? s.notes[i - 1] : n;
+        const arpPitches = [0, 1, 2, 3].map(o => s.notes[Math.min(i + o, 31)].pitch);
         audioEngine.synthNote(
           n.pitch, n.waveform, n.volume, n.effect, dur,
-          i > 0 ? s.notes[i - 1].pitch : n.pitch,
+          prev.pitch, -1, undefined, arpPitches, prev.volume,
         );
       }, Math.round(i * dur * 1000));
     });
@@ -403,15 +424,24 @@ export default function App() {
   // ── Piano key press ─────────────────────────────────────────────────────────
   const handlePianoKey = useCallback(pitch => {
     markInteracted();
-    const idx     = selRef.current;
     const n       = noteRef.current;
-    const snapped = snapRef.current(pitch);    // snap to active scale
-    updateNote(idx, { pitch: snapped, on: true });
-    audioEngine.synthNote(snapped, n.waveform, n.volume || 5, 0, 0.3);
-    setSelectedNote(prev => Math.min(prev + 1, 31));
+    const snapped = snapRef.current(pitch);
+    audioEngine.synthNote(snapped, n.waveform, n.volume || 5, 0, 0.3, snapped, activeChRef.current);
+    if (patternPlayingRef.current) {
+      // Live mode: quantize to the next step boundary
+      const length   = sfxLengthRef.current;
+      const nextStep = (notePosRef.current + 1) % length;
+      updateNote(nextStep, { pitch: snapped, on: true });
+    } else {
+      updateNote(selRef.current, { pitch: snapped, on: true });
+      setSelectedNote(prev => Math.min(prev + 1, 31));
+    }
   }, [updateNote, setSelectedNote, markInteracted]);
 
-  const handlePlay = useCallback(() => { markInteracted(); patterns.playPatterns(); }, [patterns, markInteracted]);
+  const handlePlay = useCallback(async () => {
+    markInteracted();
+    patterns.playLoop(patterns.curPattern);
+  }, [patterns, markInteracted]);
 
   // ── Shared toolbar ──────────────────────────────────────────────────────────
   const toolbar = (
@@ -426,6 +456,7 @@ export default function App() {
       onSpeedChange={v => updateSfxField({ speed: v })}
       onLoopStartChange={v => updateSfxField({ loopStart: v })}
       onLoopEndChange={v => updateSfxField({ loopEnd: v })}
+      onLengthChange={v => updateSfxField({ length: v })}
     />
   );
 
@@ -439,6 +470,7 @@ export default function App() {
   // Bass (ch0) lives below C4 → dim C4 and up.
   // Melody (ch1) lives above C4 → dim below C4.
   const activeChannelIdx = effectiveChannels.indexOf(curSfx);
+  useEffect(() => { activeChRef.current = activeChannelIdx; }, [activeChannelIdx]);
   const rangeHint = activeChannelIdx === 0 ? 'bass'
     : activeChannelIdx === 1 ? 'lead'
     : undefined;
@@ -487,22 +519,53 @@ export default function App() {
                 {curPat.channels[ci] === null && (
                   <span style={{ fontSize: 7, color: '#2a2a2a' }}>· assign in PATTERNS</span>
                 )}
+                {/* Wavetable mode toggle — only for instrument slots 0–7 */}
+                {sfxIdx <= 7 && (
+                  <button
+                    onClick={() => toggleWavetable(sfxIdx)}
+                    title={trackSfx.wavetable
+                      ? `W${sfxIdx}: waveform instrument mode — click to switch back to note mode`
+                      : `Switch SFX ${sfxIdx} to waveform instrument mode (W${sfxIdx})`}
+                    style={{
+                      marginLeft: 'auto',
+                      fontFamily: 'monospace',
+                      fontSize: 7,
+                      padding: '2px 5px',
+                      border: `1px solid ${trackSfx.wavetable ? '#00E436' : '#2a2a2a'}`,
+                      borderRadius: 2,
+                      background: 'none',
+                      color: trackSfx.wavetable ? '#00E436' : '#3a3a3a',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {trackSfx.wavetable ? `W${sfxIdx} ~` : '~ INST'}
+                  </button>
+                )}
               </div>
               <div style={{ padding: '0 10px 4px' }}>
-                <NoteGrid
-                  notes={trackSfx.notes}
-                  selectedNote={isActive ? selectedNote : -1}
-                  playPos={trackPlayPos}
-                  onNoteClick={ni => {
-                    setCurSfx(sfxIdx);
-                    setSelectedNote(ni);
-                    setTab('edit');
-                    markInteracted();
-                  }}
-                  onDragPaint={(ni, on) => updateAnyNote(sfxIdx, ni, { on })}
-                  onDragPitch={(ni, pitch) => updateAnyNote(sfxIdx, ni, { pitch, on: true })}
-                  rowHeight={72}
-                />
+                {(trackSfx.wavetable ?? false) ? (
+                  <WavetableEditor
+                    samples={trackSfx.samples ?? new Array(64).fill(0)}
+                    onUpdate={(si, val) => updateSample(sfxIdx, si, val)}
+                  />
+                ) : (
+                  <NoteGrid
+                    notes={trackSfx.notes}
+                    selectedNote={isActive ? selectedNote : -1}
+                    playPos={trackPlayPos}
+                    length={trackSfx.length ?? 32}
+                    onNoteClick={ni => {
+                      setCurSfx(sfxIdx);
+                      setSelectedNote(ni);
+                      setTab('edit');
+                      markInteracted();
+                    }}
+                    onDragPaint={(ni, on) => updateAnyNote(sfxIdx, ni, { on })}
+                    onDragPitch={(ni, pitch) => updateAnyNote(sfxIdx, ni, { pitch, on: true })}
+                    rowHeight={72}
+                    noteLabel={ci === 3 ? p => DRUM_NAMES[p] ?? noteName(p) : null}
+                  />
+                )}
               </div>
             </div>
           );
@@ -525,6 +588,24 @@ export default function App() {
     </>
   );
 
+  // Which of SFX slots 0–7 are in wavetable mode — passed to NoteEditor picker
+  const wavetableActive = sfxSlots.slice(0, 8).map(s => s.wavetable ?? false);
+
+  // Build (or retrieve from cache) the PeriodicWave for a custom waveform instrument
+  const getCustomWave = useCallback((waveformId) => {
+    if (waveformId < 8 || waveformId > 15) return null;
+    const slotIdx = waveformId - 8;
+    const slot = sfxSlots[slotIdx];
+    if (!slot?.wavetable) return null;
+    return audioEngine.getOrBuildWave(slotIdx, slot.samples ?? new Array(64).fill(0));
+  }, [sfxSlots]);
+
+  const channelDisplayData = effectiveChannels.map((sfxIdx, ci) => ({
+    label:    CH_ROLES[ci],
+    color:    CH_COLORS[ci],
+    waveform: sfxSlots[sfxIdx].notes.find(n => n.on)?.waveform ?? 0,
+  }));
+
   const tabContent = (
     <TabContent
       tab={tab} sfx={sfx} sfxSlots={sfxSlots} curSfx={curSfx}
@@ -533,6 +614,9 @@ export default function App() {
       patterns={patterns} previewTake={previewTake}
       nextPitch={nextPitch} isTouch={vp.isTouch}
       onSelectSfx={idx => { setCurSfx(idx); setTab('edit'); }}
+      activeChannelIdx={activeChannelIdx}
+      wavetableActive={wavetableActive}
+      getCustomWave={getCustomWave}
     />
   );
 
@@ -568,9 +652,9 @@ export default function App() {
           <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
             {tabContent}
           </div>
-          {/* Oscilloscope — live waveform of the active note */}
-          <div style={{ padding: '8px 12px', borderTop: '1px solid #1c1c1c', flexShrink: 0 }}>
-            <WaveformDisplay currentWaveform={note.waveform} />
+          {/* Oscilloscope — 4 per-track live waveforms */}
+          <div style={{ padding: '6px 12px', borderTop: '1px solid #1c1c1c', flexShrink: 0 }}>
+            <WaveformDisplay channels={channelDisplayData} />
           </div>
         </div>
       </div>

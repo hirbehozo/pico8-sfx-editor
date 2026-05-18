@@ -1,16 +1,11 @@
 import { useRef, useEffect, useMemo } from 'react';
-import { WAVE_COLS } from '../constants.js';
 import { audioEngine } from '../audio.js';
 
-// ── Canvas dimensions ─────────────────────────────────────────────────────────
-const W       = 256;  // width shared by both canvases
-const WAVE_H  = 64;   // waveform canvas height
-const SPEC_H  = 32;   // spectrum canvas height
-const NUM_BARS = 32;  // FFT bar count
+const CANVAS_W = 260;
+const TRACK_H  = 36;
+const LABEL_W  = 34;
 
 // ── Static waveform illustrations ─────────────────────────────────────────────
-// Generates one buffer representing 2 visual cycles of the given waveform.
-// Used when no note is playing. Computed once per waveform change via useMemo.
 
 const tri = (x) => {
   const t = ((x % 1) + 1) % 1;
@@ -25,30 +20,14 @@ function generateStatic(waveform, samples) {
     const tmod = t % 1;
     let v = 0;
     switch (waveform) {
-      case 0: // triangle
-        v = tri(tmod);
-        break;
-      case 1: // tilted saw — rises over 65%, drops over 35%
-        v = tmod < 0.65 ? (tmod / 0.65) * 2 - 1 : 1 - ((tmod - 0.65) / 0.35) * 2;
-        break;
-      case 2: // saw (rising ramp)
-        v = tmod * 2 - 1;
-        break;
-      case 3: // square 50%
-        v = tmod < 0.5 ? 1 : -1;
-        break;
-      case 4: // pulse ~25%
-        v = tmod < 0.25 ? 1 : -1;
-        break;
-      case 5: // organ: triangle + 2nd + 3rd harmonics (mirrors audio.js)
-        v = tri(tmod) * 0.6 + tri(tmod * 2) * 0.3 + tri(tmod * 3) * 0.1;
-        break;
-      case 6: // noise (seeded once per waveform selection via useMemo)
-        v = Math.random() * 2 - 1;
-        break;
-      case 7: // phaser: amplitude-modulated sine (illustrates beating)
-        v = Math.sin(tmod * Math.PI * 2) * (0.75 + 0.25 * Math.cos(tmod * Math.PI * 6));
-        break;
+      case 0: v = tri(tmod); break;
+      case 1: v = tmod < 0.65 ? (tmod / 0.65) * 2 - 1 : 1 - ((tmod - 0.65) / 0.35) * 2; break;
+      case 2: v = tmod * 2 - 1; break;
+      case 3: v = tmod < 0.5 ? 1 : -1; break;
+      case 4: v = tmod < 0.25 ? 1 : -1; break;
+      case 5: v = tri(tmod) * 0.6 + tri(tmod * 2) * 0.3 + tri(tmod * 3) * 0.1; break;
+      case 6: v = Math.random() * 2 - 1; break;
+      case 7: v = Math.sin(tmod * Math.PI * 2) * (0.75 + 0.25 * Math.cos(tmod * Math.PI * 6)); break;
     }
     data[i] = v;
   }
@@ -56,129 +35,111 @@ function generateStatic(waveform, samples) {
 }
 
 // ── WaveformDisplay ───────────────────────────────────────────────────────────
+// channels: [{ label, color, waveform }, ...] — one entry per track (0–3)
 
-export default function WaveformDisplay({ currentWaveform = 0 }) {
-  const waveRef = useRef(null);  // waveform canvas
-  const specRef = useRef(null);  // spectrum canvas
-  const aBufRef = useRef(null);  // { timeBuf, freqBuf } allocated once
+export default function WaveformDisplay({ channels }) {
+  const canvasRefs = useRef([null, null, null, null]);
+  const aBufsRef   = useRef([null, null, null, null]);
 
-  const color      = WAVE_COLS[currentWaveform] ?? WAVE_COLS[0];
-  const staticData = useMemo(() => generateStatic(currentWaveform, W), [currentWaveform]);
+  // Recompute static waveform buffers only when waveform IDs change
+  const waveformKey = channels.map(ch => ch.waveform).join(',');
+  const staticData  = useMemo(
+    () => channels.map(ch => generateStatic(ch.waveform, CANVAS_W)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [waveformKey],
+  );
 
+  // Refs so the RAF closure always reads the latest values without restarting
+  const channelsRef   = useRef(channels);
+  const staticDataRef = useRef(staticData);
+  useEffect(() => { channelsRef.current   = channels;   }, [channels]);
+  useEffect(() => { staticDataRef.current = staticData; }, [staticData]);
+
+  // Single RAF loop, runs for the lifetime of the component
   useEffect(() => {
-    const wCvs = waveRef.current;
-    const sCvs = specRef.current;
-    if (!wCvs || !sCvs) return;
-    const wCtx = wCvs.getContext('2d');
-    const sCtx = sCvs.getContext('2d');
-
     let rafId;
-
     const tick = () => {
-      const analyser = audioEngine.getAnalyser();
+      const chs    = channelsRef.current;
+      const statics = staticDataRef.current;
 
-      // Allocate analysis buffers once when the analyser first becomes available
-      if (analyser && !aBufRef.current) {
-        aBufRef.current = {
-          timeBuf: new Uint8Array(analyser.fftSize),
-          freqBuf: new Uint8Array(analyser.frequencyBinCount),
-        };
-      }
+      chs.forEach((ch, ci) => {
+        const canvas = canvasRefs.current[ci];
+        if (!canvas) return;
+        const ctx     = canvas.getContext('2d');
+        const analyser = audioEngine.getChannelAnalyser(ci);
 
-      // ── Waveform canvas ─────────────────────────────────────────────────────
-      wCtx.fillStyle = '#080808';
-      wCtx.fillRect(0, 0, W, WAVE_H);
-
-      // Horizontal centre reference line
-      wCtx.strokeStyle = '#1c1c1c';
-      wCtx.lineWidth = 1;
-      wCtx.beginPath();
-      wCtx.moveTo(0, WAVE_H / 2);
-      wCtx.lineTo(W, WAVE_H / 2);
-      wCtx.stroke();
-
-      // Decide data source
-      let liveMode = false;
-      if (analyser && aBufRef.current) {
-        analyser.getByteTimeDomainData(aBufRef.current.timeBuf);
-        // Signal present when any sample deviates from the silence value (128)
-        liveMode = aBufRef.current.timeBuf.some(v => Math.abs(v - 128) > 2);
-      }
-
-      wCtx.strokeStyle = color;
-      wCtx.lineWidth   = 1.5;
-      wCtx.beginPath();
-      for (let x = 0; x < W; x++) {
-        let amp;
-        if (liveMode) {
-          const idx = Math.floor(x * aBufRef.current.timeBuf.length / W);
-          amp = (aBufRef.current.timeBuf[idx] - 128) / 128;
-        } else {
-          const idx = Math.floor(x * staticData.length / W);
-          amp = staticData[idx];
+        if (analyser && !aBufsRef.current[ci]) {
+          aBufsRef.current[ci] = new Uint8Array(analyser.fftSize);
         }
-        // Map amplitude (-1…1) to canvas y, 10% headroom each side
-        const y = WAVE_H / 2 - amp * (WAVE_H / 2) * 0.88;
-        if (x === 0) wCtx.moveTo(x, y);
-        else         wCtx.lineTo(x, y);
-      }
-      wCtx.stroke();
 
-      // ── Spectrum canvas ─────────────────────────────────────────────────────
-      sCtx.fillStyle = '#080808';
-      sCtx.fillRect(0, 0, W, SPEC_H);
+        // Background + centre line
+        ctx.fillStyle = '#080808';
+        ctx.fillRect(0, 0, CANVAS_W, TRACK_H);
+        ctx.strokeStyle = '#1c1c1c';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, TRACK_H / 2);
+        ctx.lineTo(CANVAS_W, TRACK_H / 2);
+        ctx.stroke();
 
-      if (analyser && aBufRef.current) {
-        analyser.getByteFrequencyData(aBufRef.current.freqBuf);
-        const { freqBuf } = aBufRef.current;
-        const binsPerBar = Math.max(1, Math.floor(freqBuf.length / NUM_BARS));
-        const barW       = W / NUM_BARS;
+        // Detect live signal
+        let liveMode = false;
+        if (analyser && aBufsRef.current[ci]) {
+          analyser.getByteTimeDomainData(aBufsRef.current[ci]);
+          liveMode = aBufsRef.current[ci].some(v => Math.abs(v - 128) > 2);
+        }
 
-        for (let b = 0; b < NUM_BARS; b++) {
-          let sum = 0;
-          const start = b * binsPerBar;
-          for (let k = 0; k < binsPerBar; k++) sum += freqBuf[start + k];
-          const avg  = sum / binsPerBar;
-          const barH = (avg / 255) * SPEC_H;
-
-          if (barH > 0.5) {
-            // Fade opacity with magnitude so quiet bars are subtler
-            sCtx.globalAlpha = 0.35 + (avg / 255) * 0.65;
-            sCtx.fillStyle   = color;
-            sCtx.fillRect(
-              Math.floor(b * barW) + 1,
-              SPEC_H - barH,
-              Math.max(1, Math.floor(barW) - 2),
-              barH,
-            );
+        // Draw waveform
+        ctx.strokeStyle = ch.color;
+        ctx.lineWidth   = 1.5;
+        ctx.beginPath();
+        for (let x = 0; x < CANVAS_W; x++) {
+          let amp = 0;
+          if (liveMode) {
+            const idx = Math.floor(x * aBufsRef.current[ci].length / CANVAS_W);
+            amp = (aBufsRef.current[ci][idx] - 128) / 128;
+          } else if (statics[ci]) {
+            const idx = Math.floor(x * statics[ci].length / CANVAS_W);
+            amp = statics[ci][idx];
           }
+          const y = TRACK_H / 2 - amp * (TRACK_H / 2) * 0.85;
+          if (x === 0) ctx.moveTo(x, y);
+          else         ctx.lineTo(x, y);
         }
-        sCtx.globalAlpha = 1;
-      }
+        ctx.stroke();
+      });
 
       rafId = requestAnimationFrame(tick);
     };
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [color, staticData]);
+  }, []); // intentionally empty — reads fresh data through refs
 
   return (
-    <div style={{ display: 'inline-block', backgroundColor: '#080808' }}>
-      <canvas
-        ref={waveRef}
-        width={W}
-        height={WAVE_H}
-        style={{ display: 'block' }}
-      />
-      {/* 1px rule between waveform and spectrum */}
-      <div style={{ height: 1, backgroundColor: '#1c1c1c' }} />
-      <canvas
-        ref={specRef}
-        width={W}
-        height={SPEC_H}
-        style={{ display: 'block' }}
-      />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {channels.map((ch, ci) => (
+        <div key={ci} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{
+            width: LABEL_W,
+            fontSize: 7,
+            fontFamily: 'monospace',
+            letterSpacing: 1,
+            color: ch.color,
+            textAlign: 'right',
+            flexShrink: 0,
+            opacity: 0.8,
+          }}>
+            {ch.label.slice(0, 4)}
+          </span>
+          <canvas
+            ref={el => { canvasRefs.current[ci] = el; }}
+            width={CANVAS_W}
+            height={TRACK_H}
+            style={{ display: 'block' }}
+          />
+        </div>
+      ))}
     </div>
   );
 }

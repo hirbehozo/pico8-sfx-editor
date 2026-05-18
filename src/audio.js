@@ -1,37 +1,71 @@
+import * as Tone from 'tone';
 import { noteToFreq } from './utils.js';
 
-// Major triad semitone offsets for arpeggio effects
-const MAJOR_TRIAD = [0, 4, 7];
+function rawCtx() { return Tone.getContext().rawContext; }
 
 class AudioEngine {
   constructor() {
-    this._ctx      = null;
-    this._analyser = null;
-    this._active   = []; // [{ toStop: Node[], masterGain: GainNode }]
+    this._analyser         = null;
+    this._channelAnalysers = [null, null, null, null];
+    this._active           = [];
+    this._waveCache        = new Map(); // slotIdx → PeriodicWave
   }
 
-  getCtx() {
-    if (!this._ctx) {
-      this._ctx = new (window.AudioContext || window.webkitAudioContext)();
-      // AnalyserNode sits between all output and the destination so
-      // WaveformDisplay can read live time-domain and frequency data.
-      this._analyser = this._ctx.createAnalyser();
+  _ensureSharedAnalyser() {
+    if (!this._analyser) {
+      const ctx = rawCtx();
+      this._analyser = ctx.createAnalyser();
       this._analyser.fftSize = 2048;
       this._analyser.smoothingTimeConstant = 0.75;
-      this._analyser.connect(this._ctx.destination);
+      this._analyser.connect(ctx.destination);
     }
-    // iOS and some browsers create the context in a suspended state even
-    // during a user gesture. Resume whenever we're about to use it.
-    if (this._ctx.state === 'suspended') this._ctx.resume();
-    return this._ctx;
+    return this._analyser;
   }
 
-  // Returns the shared AnalyserNode, or null before the first note is played.
+  _ensureChannelAnalyser(ci) {
+    if (!this._channelAnalysers[ci]) {
+      const ctx = rawCtx();
+      const a = ctx.createAnalyser();
+      a.fftSize = 2048;
+      a.smoothingTimeConstant = 0.75;
+      a.connect(ctx.destination);
+      this._channelAnalysers[ci] = a;
+    }
+    return this._channelAnalysers[ci];
+  }
+
+  getChannelAnalyser(ci) { return this._channelAnalysers[ci]; }
   getAnalyser() { return this._analyser; }
 
+  // Build a PeriodicWave from 64 amplitude samples (−7..+7) via DFT and cache it.
+  getOrBuildWave(slotIdx, samples) {
+    if (this._waveCache.has(slotIdx)) return this._waveCache.get(slotIdx);
+    const ctx = rawCtx();
+    const N = samples.length; // 64
+    const half = N >> 1;
+    const real = new Float32Array(half + 1);
+    const imag = new Float32Array(half + 1);
+    for (let k = 1; k <= half; k++) {
+      let cos = 0, sin = 0;
+      for (let n = 0; n < N; n++) {
+        const phase = (2 * Math.PI * k * n) / N;
+        cos += samples[n] * Math.cos(phase);
+        sin += samples[n] * Math.sin(phase);
+      }
+      real[k] = (2 / N) * cos;
+      imag[k] = (2 / N) * sin;
+    }
+    real[0] = 0; imag[0] = 0; // no DC offset
+    const wave = ctx.createPeriodicWave(real, imag, { disableNormalization: true });
+    this._waveCache.set(slotIdx, wave);
+    return wave;
+  }
+
+  invalidateWaveCache(slotIdx) { this._waveCache.delete(slotIdx); }
+
   stopAll() {
-    if (!this._ctx) return;
-    const now = this._ctx.currentTime;
+    const ctx = rawCtx();
+    const now = ctx.currentTime;
     for (const { toStop, masterGain } of this._active) {
       for (const node of toStop) {
         try { node.stop(now); } catch (_) {}
@@ -41,20 +75,24 @@ class AudioEngine {
     this._active = [];
   }
 
-  // prevPitch defaults to pitch so slide has no effect when there is no prior note
-  async synthNote(pitch, waveform, volume, effect, duration, prevPitch = pitch) {
-    const ctx = this.getCtx();
-    // Safari creates AudioContext in 'suspended' state even during a user gesture,
-    // and resume() is async. If we read currentTime before the context is running
-    // it returns 0, causing all notes to be scheduled in the past → silence.
-    if (ctx.state !== 'running') await ctx.resume();
-    const now = ctx.currentTime;
+  // startTime  — AudioContext time for sample-accurate scheduling from Transport callbacks.
+  // arpPitches — pitches of notes [n, n+1, n+2, n+3] for arpeggio cycling.
+  // prevVolume — previous note's volume, used by slide to ramp gain as well as pitch.
+  // channel 0-3 routes to that track's AnalyserNode; -1 uses the shared one.
+  synthNote(pitch, waveform, volume, effect, duration,
+            prevPitch = pitch, channel = -1, startTime,
+            arpPitches = [], prevVolume = volume, customWave = null) {
+    const ctx = rawCtx();
+    const now = startTime ?? ctx.currentTime;
     const freq = noteToFreq(pitch);
     const targetGain = 0.35 * (volume / 7);
 
     const masterGain = ctx.createGain();
     masterGain.gain.setValueAtTime(targetGain, now);
-    masterGain.connect(this._analyser); // route through shared analyser
+    const dest = (channel >= 0 && channel <= 3)
+      ? this._ensureChannelAnalyser(channel)
+      : this._ensureSharedAnalyser();
+    masterGain.connect(dest);
 
     // sources: { osc: AudioScheduledSourceNode, freqMult: number }
     // freqMult === 0 means the source has no .frequency param (noise)
@@ -134,16 +172,32 @@ class AudioEngine {
         break;
       }
 
-      default:
-        addOsc('triangle', 1, masterGain);
+      default: {
+        // Waveforms 8-15 → custom PeriodicWave instruments (W0-W7)
+        if (waveform >= 8 && waveform <= 15 && customWave) {
+          const osc = ctx.createOscillator();
+          osc.setPeriodicWave(customWave);
+          osc.frequency.value = freq;
+          osc.connect(masterGain);
+          sources.push({ osc, freqMult: 1 });
+          toStop.push(osc);
+        } else {
+          addOsc('triangle', 1, masterGain); // fallback if wave not built yet
+        }
+      }
     }
 
     // -------------------------------------------------------------------------
     // Effects
     // -------------------------------------------------------------------------
     switch (effect) {
-      case 1: { // slide — linear freq ramp from prevPitch over first 40% of note
+      case 1: { // slide — ramp pitch AND volume from previous note over first 40%
         const fromFreq = noteToFreq(prevPitch);
+        const fromGain = 0.35 * (prevVolume / 7);
+        // Override the initial gain so volume starts from the previous note's level
+        masterGain.gain.cancelScheduledValues(now);
+        masterGain.gain.setValueAtTime(fromGain, now);
+        masterGain.gain.linearRampToValueAtTime(targetGain, now + duration * 0.4);
         for (const { osc, freqMult } of sources) {
           if (!osc.frequency || !freqMult) continue;
           osc.frequency.setValueAtTime(fromFreq * freqMult, now);
@@ -190,19 +244,23 @@ class AudioEngine {
         masterGain.gain.linearRampToValueAtTime(0, now + duration);
         break;
 
-      case 6: // arpeggio fast — major triad, 40 ms per step
-      case 7: { // arpeggio slow — major triad, 90 ms per step
-        const step = effect === 6 ? 0.040 : 0.090;
+      case 6: // arpeggio fast — iterate notes n/n+1/n+2/n+3 every 4 ticks (2 if speed≤8)
+      case 7: { // arpeggio slow — every 8 ticks (4 if speed≤8)
+        const sfxSpeed = Math.round(duration * 60);
+        const halfArp  = sfxSpeed <= 8;
+        const step = effect === 6
+          ? (halfArp ? 2 / 60 : 4 / 60)
+          : (halfArp ? 4 / 60 : 8 / 60);
+        // Build 4-pitch cycle from consecutive SFX notes; fill gaps with current pitch
+        const cycle = [0, 1, 2, 3].map(offset =>
+          noteToFreq(arpPitches[offset] !== undefined ? arpPitches[offset] : pitch),
+        );
         for (const { osc, freqMult } of sources) {
           if (!osc.frequency || !freqMult) continue;
           let t = now;
           let i = 0;
           while (t < now + duration) {
-            const semitones = MAJOR_TRIAD[i % 3];
-            osc.frequency.setValueAtTime(
-              freq * freqMult * Math.pow(2, semitones / 12),
-              t,
-            );
+            osc.frequency.setValueAtTime(cycle[i % 4] * freqMult, t);
             t += step;
             i++;
           }
@@ -217,7 +275,7 @@ class AudioEngine {
     // doesn't cut mid-cycle and produce an audible pop.
     // Fade-out (effect 5) already reaches 0 at `duration`, so skip it.
     // -------------------------------------------------------------------------
-    const DECLICK = 0.012; // 12 ms — inaudible as a fade, eliminates the click
+    const DECLICK = 0.012;
     if (effect !== 5) {
       const rampStart = Math.max(now, now + duration - DECLICK);
       masterGain.gain.setValueAtTime(targetGain, rampStart);
@@ -229,12 +287,11 @@ class AudioEngine {
     // -------------------------------------------------------------------------
     for (const { osc } of sources) {
       osc.start(now);
-      osc.stop(now + duration + 0.005); // tiny tail so gain ramp completes first
+      osc.stop(now + duration + 0.005);
     }
 
     this._active.push({ toStop, masterGain });
 
-    // Auto-cleanup when the first source ends so _active doesn't grow unbounded
     sources[0]?.osc.addEventListener('ended', () => {
       try { masterGain.disconnect(); } catch (_) {}
       this._active = this._active.filter(a => a.toStop !== toStop);

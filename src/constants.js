@@ -144,6 +144,15 @@ export const MODE_LABELS = Object.fromEntries(
 export const CH_ROLES  = ['BASS', 'MELODY', 'CHORDS', 'DRUMS'];
 export const CH_COLORS = ['#29ADFF', '#00E436', '#FFEC27', '#FF77A8'];
 
+// Drum pad label map: pitch → short name shown in the DRUMS NoteGrid instead of note name.
+// Keyed by the default pitches from mkDrumSfx (C1=0, C2=12, C3=24, C5=48).
+export const DRUM_NAMES = {
+  0:  'KICK',
+  12: 'TOM',
+  24: 'SNARE',
+  48: 'HAT',
+};
+
 // 64 pitches: C1 (pitch 0) through D#6 (pitch 63)
 export const NOTE_NAMES = Array.from({ length: 64 }, (_, i) => {
   const octave = Math.floor(i / 12) + 1;
@@ -152,14 +161,15 @@ export const NOTE_NAMES = Array.from({ length: 64 }, (_, i) => {
 });
 
 export const WAVEFORMS = [
-  'Triangle',
-  'Tilted-saw',
-  'Saw',
-  'Square',
-  'Pulse',
-  'Organ',
-  'Noise',
-  'Phaser',
+  'Triangle',   // 0
+  'Tilted-saw', // 1
+  'Saw',        // 2
+  'Square',     // 3
+  'Pulse',      // 4
+  'Organ',      // 5
+  'Noise',      // 6
+  'Phaser',     // 7
+  'W0', 'W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', // 8-15: custom waveform instruments
 ];
 
 export const EFFECTS = [
@@ -195,14 +205,16 @@ export const P8 = [
 
 // One P8 color per waveform (indices into P8)
 export const WAVE_COLS = [
-  P8[12], // triangle  → blue
-  P8[9],  // tilt-saw  → orange
-  P8[10], // saw       → yellow
-  P8[11], // square    → green
-  P8[14], // pulse     → pink
-  P8[2],  // organ     → dark purple
-  P8[8],  // noise     → red
-  P8[15], // phaser    → peach
+  P8[12], // 0  triangle  → blue
+  P8[9],  // 1  tilt-saw  → orange
+  P8[10], // 2  saw       → yellow
+  P8[11], // 3  square    → green
+  P8[14], // 4  pulse     → pink
+  P8[2],  // 5  organ     → dark purple
+  P8[8],  // 6  noise     → red
+  P8[15], // 7  phaser    → peach
+  // Custom waveform instruments (W0-W7) — green tones matching PICO-8's display
+  P8[11], P8[11], P8[11], P8[11], P8[11], P8[11], P8[11], P8[11],
 ];
 
 // One P8 color per effect (indices into P8)

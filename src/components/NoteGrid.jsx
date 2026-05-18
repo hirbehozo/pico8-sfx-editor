@@ -37,7 +37,7 @@ const nameStyle = {
 
 export default function NoteGrid({
   notes, selectedNote, playPos, onNoteClick, onDragPaint, onDragPitch,
-  rowHeight = 144,
+  rowHeight = 144, noteLabel = null, length = 32,
 }) {
   const BAR_AREA = rowHeight - HEX_H;
 
@@ -185,6 +185,7 @@ export default function NoteGrid({
         {notes.map((note, i) => {
           const isSelected = i === selectedNote;
           const isPlaying  = i === playPos;
+          const isInactive = i >= length;
           const bh         = barHeight(note.pitch, BAR_AREA);
           const colBg      = isPlaying ? 'rgba(0,228,54,0.12)' : '#111';
           const shadow     = isSelected ? 'inset 2px 0 0 #29ADFF' : undefined;
@@ -209,6 +210,7 @@ export default function NoteGrid({
                 borderRight: '1px solid #1c1c1c',
                 boxShadow: shadow,
                 overflow: 'hidden', cursor: 'pointer',
+                opacity: isInactive ? 0.25 : 1,
               }}
             >
               <div style={{
@@ -224,7 +226,7 @@ export default function NoteGrid({
                   ...nameStyle, bottom: nameBtm,
                   opacity: 0.3 + (note.volume / 7) * 0.7,
                 }}>
-                  {noteName(note.pitch)}
+                  {noteLabel ? noteLabel(note.pitch) : noteName(note.pitch)}
                 </span>
               )}
 

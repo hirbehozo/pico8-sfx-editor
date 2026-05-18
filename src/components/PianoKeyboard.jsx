@@ -98,7 +98,7 @@ export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH
                   ? (isBass ? '#c8d8ff' : P8[7])
                   : (isBass ? '#7888b8' : '#9a9b9f'),
               cursor: 'pointer',
-              opacity: outOfRange ? baseOpacity * 0.38 : baseOpacity,
+              opacity: outOfRange ? baseOpacity * 0.6 : baseOpacity,
             }}
           >
             <span style={{
@@ -140,7 +140,7 @@ export default function PianoKeyboard({ activePitch, onKeyPress, keyW = 22, keyH
                   ? (isBass ? '#0d1a40' : P8[1])
                   : '#2a2a2a',
               zIndex: 1, cursor: 'pointer', overflow: 'hidden',
-              opacity: outOfRange ? baseOpacity * 0.38 : baseOpacity,
+              opacity: outOfRange ? baseOpacity * 0.6 : baseOpacity,
             }}
           >
             <span style={{

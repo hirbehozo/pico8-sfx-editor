@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { mkSfx, sfxToHex } from '../utils.js';
+import * as Tone from 'tone';
+import { mkSfx, mkDrumSfx, mkNote, sfxToHex } from '../utils.js';
 import { audioEngine } from '../audio.js';
 
 function readStorage(key, fallback) {
@@ -13,7 +14,7 @@ function readStorage(key, fallback) {
 
 export function useSfxEditor() {
   const [sfxSlots, setSfxSlots] = useState(() =>
-    readStorage('p8-sfx', Array.from({ length: 64 }, mkSfx)),
+    readStorage('p8-sfx', Array.from({ length: 64 }, (_, i) => i === 3 ? mkDrumSfx() : mkSfx())),
   );
   const [savedTakes, setSavedTakes] = useState(() =>
     readStorage('p8-takes', []),
@@ -26,7 +27,6 @@ export function useSfxEditor() {
   // Stable refs so callbacks never capture stale state
   const sfxSlotsRef = useRef(sfxSlots);
   const curSfxRef = useRef(curSfx);
-  const playTimersRef = useRef([]);
 
   useEffect(() => { sfxSlotsRef.current = sfxSlots; }, [sfxSlots]);
   useEffect(() => { curSfxRef.current = curSfx; }, [curSfx]);
@@ -44,12 +44,13 @@ export function useSfxEditor() {
     const id = setTimeout(() => {
       try { localStorage.setItem('p8-takes', JSON.stringify(savedTakes)); } catch (_) {}
     }, 800);
-    return () => clearTimeout(id);
   }, [savedTakes]);
 
-  // Clean up audio and timers on unmount
+  // Stop Transport and audio on unmount
   useEffect(() => () => {
-    playTimersRef.current.forEach(clearTimeout);
+    const t = Tone.getTransport();
+    t.stop();
+    t.cancel();
     audioEngine.stopAll();
   }, []);
 
@@ -87,6 +88,27 @@ export function useSfxEditor() {
     });
   }, []);
 
+  const toggleWavetable = useCallback((sfxIdx) => {
+    if (sfxIdx > 7) return;
+    audioEngine.invalidateWaveCache(sfxIdx);
+    setSfxSlots(slots => {
+      const next = [...slots];
+      next[sfxIdx] = { ...slots[sfxIdx], wavetable: !(slots[sfxIdx].wavetable ?? false) };
+      return next;
+    });
+  }, []);
+
+  const updateSample = useCallback((sfxIdx, sampleIdx, value) => {
+    audioEngine.invalidateWaveCache(sfxIdx);
+    setSfxSlots(slots => {
+      const samples = [...(slots[sfxIdx].samples ?? new Array(64).fill(0))];
+      samples[sampleIdx] = Math.max(-7, Math.min(7, value));
+      const next = [...slots];
+      next[sfxIdx] = { ...slots[sfxIdx], samples };
+      return next;
+    });
+  }, []);
+
   const toggleNote = useCallback((idx) => {
     setSfxSlots(slots => {
       const cur = curSfxRef.current;
@@ -101,52 +123,64 @@ export function useSfxEditor() {
   // ── Playback ──────────────────────────────────────────────────────────────
 
   const stopPlay = useCallback(() => {
-    playTimersRef.current.forEach(clearTimeout);
-    playTimersRef.current = [];
+    const transport = Tone.getTransport();
+    transport.stop();
+    transport.cancel();
     audioEngine.stopAll();
     setIsPlaying(false);
     setPlayPos(-1);
   }, []);
 
-  const playSfx = useCallback(() => {
-    // Cancel any in-progress playback before starting fresh
-    playTimersRef.current.forEach(clearTimeout);
-    playTimersRef.current = [];
+  const playSfx = useCallback(async () => {
+    const transport = Tone.getTransport();
+    transport.stop();
+    transport.cancel();
+    transport.loop = false;
     audioEngine.stopAll();
 
-    // Snapshot the SFX so edits during playback don't affect the current run
-    const sfx = sfxSlotsRef.current[curSfxRef.current];
-    const noteDuration = sfx.speed / 60;  // seconds per note
-    const noteMs = noteDuration * 1000;   // ms per note
+    await Tone.start();
+
+    const sfxIndex    = curSfxRef.current;
+    const sfx         = sfxSlotsRef.current[sfxIndex];
+    const noteDuration = sfx.speed / 60;
+    const seqLength   = sfx.length ?? 32;
 
     setIsPlaying(true);
     setPlayPos(0);
 
-    const noteIds = sfx.notes.map((note, i) =>
-      setTimeout(() => {
-        setPlayPos(i);
-        if (note.on) {
-          // Provide previous note's pitch so slide effect has a source to ramp from
-          const prevPitch = i > 0 ? sfx.notes[i - 1].pitch : note.pitch;
+    for (let i = 0; i < seqLength; i++) {
+      const i_ = i;
+      transport.schedule((audioTime) => {
+        setPlayPos(i_);
+        const liveSfx  = sfxSlotsRef.current[sfxIndex];
+        const liveNote = liveSfx.notes[i_];
+        if (liveNote.on) {
+          const prev       = i_ > 0 ? liveSfx.notes[i_ - 1] : liveNote;
+          const arpPitches = [0, 1, 2, 3].map(o =>
+            liveSfx.notes[Math.min(i_ + o, 31)].pitch,
+          );
+          const customWave = liveNote.waveform >= 8 && liveNote.waveform <= 15
+            ? (() => {
+                const ws = sfxSlotsRef.current[liveNote.waveform - 8];
+                return ws?.wavetable
+                  ? audioEngine.getOrBuildWave(liveNote.waveform - 8, ws.samples ?? new Array(64).fill(0))
+                  : null;
+              })()
+            : null;
           audioEngine.synthNote(
-            note.pitch,
-            note.waveform,
-            note.volume,
-            note.effect,
-            noteDuration,
-            prevPitch,
+            liveNote.pitch, liveNote.waveform, liveNote.volume, liveNote.effect,
+            noteDuration, prev.pitch, -1, audioTime, arpPitches, prev.volume, customWave,
           );
         }
-      }, i * noteMs),
-    );
+      }, i_ * noteDuration);
+    }
 
-    // Reset playback state after the last note's duration has elapsed
-    const endId = setTimeout(() => {
+    transport.schedule(() => {
       setIsPlaying(false);
       setPlayPos(-1);
-    }, 32 * noteMs);
+    }, seqLength * noteDuration);
 
-    playTimersRef.current = [...noteIds, endId];
+    transport.start();
   }, []);
 
   // ── Takes ─────────────────────────────────────────────────────────────────
@@ -182,6 +216,19 @@ export function useSfxEditor() {
     sfxToHex(sfxSlotsRef.current[curSfxRef.current]),
   []);
 
+  // Reset the 4 default tracks to their starting state:
+  // slots 0–2 → blank SFX, slot 3 → default drum groove.
+  const resetTracks = useCallback(() => {
+    setSfxSlots(slots => {
+      const next = [...slots];
+      next[0] = { ...mkSfx(), notes: Array.from({ length: 32 }, mkNote) };
+      next[1] = { ...mkSfx(), notes: Array.from({ length: 32 }, mkNote) };
+      next[2] = { ...mkSfx(), notes: Array.from({ length: 32 }, mkNote) };
+      next[3] = mkDrumSfx();
+      return next;
+    });
+  }, []);
+
   // Returns all 64 slots as a newline-separated block ready to paste into a .p8 file
   const exportAll = useCallback(() =>
     sfxSlotsRef.current.map(sfxToHex).join('\n'),
@@ -200,14 +247,17 @@ export function useSfxEditor() {
     updateAnyNote,
     updateSfxField,
     toggleNote,
-    setCurSfx,       // raw React setter — stable reference, safe to pass as prop
-    setSelectedNote, // raw React setter — stable reference, safe to pass as prop
+    setCurSfx,
+    setSelectedNote,
     playSfx,
     stopPlay,
+    toggleWavetable,
+    updateSample,
     saveTake,
     loadTake,
     deleteTake,
     exportSingle,
     exportAll,
+    resetTracks,
   };
 }

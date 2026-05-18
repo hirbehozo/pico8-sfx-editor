@@ -83,6 +83,40 @@ const actionBtn = (overrides = {}) => ({
   ...overrides,
 });
 
+// ── Step length selector ──────────────────────────────────────────────────────
+
+const STEP_OPTIONS = [2, 4, 8, 16, 32];
+
+function StepSelector({ length, onChange, isTouch }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+      <span style={knobLabel}>STEPS</span>
+      <div style={{ display: 'flex', gap: 2 }}>
+        {STEP_OPTIONS.map(s => (
+          <button
+            key={s}
+            onClick={() => onChange(s)}
+            title={`Set sequence length to ${s} steps`}
+            style={{
+              fontFamily: 'monospace',
+              fontSize: 9,
+              padding: isTouch ? '6px 8px' : '2px 6px',
+              border: '1px solid',
+              borderColor: length === s ? '#29ADFF' : '#3a3a3a',
+              borderRadius: 2,
+              background: 'none',
+              color: length === s ? '#29ADFF' : '#5F574F',
+              cursor: 'pointer',
+            }}
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Toolbar ───────────────────────────────────────────────────────────────────
 
 export default function Toolbar({
@@ -99,13 +133,15 @@ export default function Toolbar({
   onSpeedChange,
   onLoopStartChange,
   onLoopEndChange,
+  onLengthChange,
   onHelp,
   midiStatus = 'pending',
   isTouch = false,
 }) {
-  const activeCount = sfx.notes.filter(n => n.on).length;
+  const seqLength   = sfx.length ?? 32;
+  const activeCount = sfx.notes.slice(0, seqLength).filter(n => n.on).length;
   const msPerNote   = Math.round((sfx.speed / 60) * 1000);
-  const totalSec    = (32 * sfx.speed / 60).toFixed(2);
+  const totalSec    = (seqLength * sfx.speed / 60).toFixed(2);
 
   return (
     <div style={{
@@ -181,6 +217,14 @@ export default function Toolbar({
             title="Last note before the loop jumps back to LOOP ST. Set both to 0 to disable looping."
           />
         </div>
+
+        <Sep />
+
+        <StepSelector
+          length={sfx.length ?? 32}
+          onChange={onLengthChange}
+          isTouch={isTouch}
+        />
 
         <Sep />
 

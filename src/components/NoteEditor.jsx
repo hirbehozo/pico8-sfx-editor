@@ -138,7 +138,7 @@ const wrap = {
   backgroundColor: '#0d0d0d',
 };
 
-export default function NoteEditor({ note, noteIndex, onUpdate, nextPitch = null, isTouch = false }) {
+export default function NoteEditor({ note, noteIndex, onUpdate, nextPitch = null, isTouch = false, channel = -1, wavetableActive = [], getCustomWave = null }) {
   if (noteIndex == null || !note) {
     return (
       <div style={{
@@ -155,9 +155,13 @@ export default function NoteEditor({ note, noteIndex, onUpdate, nextPitch = null
     );
   }
 
-  // Preview helpers — always effect 0 (none) to avoid artefacts; min vol 1 for audibility
-  const preview = (pitch, waveform) =>
-    audioEngine.synthNote(pitch, waveform, Math.max(note.volume, 1), 0, PREVIEW_DUR);
+  const preview = (pitch, waveform) => {
+    const customWave = getCustomWave ? getCustomWave(waveform) : null;
+    audioEngine.synthNote(
+      pitch, waveform, Math.max(note.volume, 1), 0, PREVIEW_DUR,
+      pitch, channel, undefined, [], Math.max(note.volume, 1), customWave,
+    );
+  };
 
   // When a scale is active, stepping ◀ or ▶ should jump to the next in-scale pitch
   // rather than stopping at every semitone.
@@ -228,6 +232,29 @@ export default function NoteEditor({ note, noteIndex, onUpdate, nextPitch = null
               {lbl}
             </button>
           ))}
+        </div>
+
+        {/* Custom waveform instruments W0–W7 (PICO-8 waveforms 8–15) */}
+        <div style={{ display: 'flex', gap: 2, marginTop: 3 }}>
+          {[0, 1, 2, 3, 4, 5, 6, 7].map(i => {
+            const waveId = i + 8;
+            const active = wavetableActive[i] ?? false;
+            return (
+              <button
+                key={waveId}
+                onClick={() => handleWaveformChange(waveId)}
+                title={active
+                  ? `Custom waveform instrument W${i} (SFX slot ${i})`
+                  : `W${i} — SFX slot ${i} is not in waveform mode`}
+                style={{
+                  ...selBtn('#00E436', note.waveform === waveId, isTouch),
+                  opacity: active ? 1 : 0.3,
+                }}
+              >
+                W{i}
+              </button>
+            );
+          })}
         </div>
       </div>
 
