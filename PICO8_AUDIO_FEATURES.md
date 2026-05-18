@@ -142,32 +142,34 @@ stat(51–53)-- current note on channels 1–3
 ## What the App Already Gets Right
 
 - SFX hex body format (notes, speed, loop fields) — ✅
-- `editor_mode` prefix byte (`00`) — ✅ fixed
-- All 8 built-in waveforms — ✅ (audio approximation, not exact)
-- All 8 effects — ⚠️ arpeggio and slide have bugs (see above)
+- `editor_mode` prefix byte (`00`) — ✅ fixed (168 chars total)
+- All 8 built-in waveforms — ✅ (audio approximation)
+- All 8 effects — ✅ arpeggio (consecutive note pitches, correct tick timing) and slide (pitch + volume) bugs fixed
 - `__music__` export with flags and 4 channel slots — ✅
 - Pattern loop/stop flags — ✅
 - 4-track playback with mute/solo — ✅
 - Tone.Transport for drift-free sequencing — ✅
-- Variable sequence length (tiled to 32 in export) — ✅
-- Live note input while sequencer runs — ✅
+- Variable sequence length (STEPS: 2/4/8/16/32) — ✅
+  - Tiled to 32 notes in the exported hex
+  - Live length change updates `transport.loopEnd` immediately while playing
+- Live note input (piano/MIDI → lands on current step while sequencer runs) — ✅
 - Scale snap (CTRL in PICO-8 = our scale selector) — ✅
+- Custom waveform instruments (W0–W7) — ✅ UI + audio complete
+  - SFX slots 0–7 toggle between note-sequence and waveform-drawing mode
+  - 64-column amplitude editor; Web Audio PeriodicWave synthesis via DFT
+  - ⚠️ Export encoding (editor_mode byte + sample packing) is a best-guess — verify against real .p8 file
 
 ---
 
 ## Feature Backlog
 
-### 🔴 High — bugs in the current audio engine
+### ✅ Fixed — audio engine bugs
 
-#### 1. Fix arpeggio: use consecutive note pitches, not major triad
-**Bug:** `MAJOR_TRIAD = [0, 4, 7]` is hardcoded in `audio.js`. Real PICO-8 arpeggio cycles through the pitches of notes n, n+1, n+2, n+3 in the SFX.
-**Fix:** In `synthNote`, when effect is 6 or 7, receive the surrounding note pitches and cycle through them. The sequencer callbacks need to pass `notes[ni], notes[ni+1], notes[ni+2], notes[ni+3]` to the engine.
-**Exports to:** No format change — this is audio playback accuracy.
+#### 1. Arpeggio: consecutive note pitches — DONE
+Arpeggio now cycles through the pitches of notes n, n+1, n+2, n+3 from the live SFX state. Step timing uses PICO-8 tick math (4/60s fast, 8/60s slow, halved when speed ≤ 8). The `MAJOR_TRIAD` hack is gone.
 
-#### 2. Fix slide: ramp volume as well as pitch
-**Bug:** Slide only ramps pitch. The manual says "Slide to the next note and volume."
-**Fix:** In `synthNote` for effect 1, also ramp `masterGain.gain` from the current note's `targetGain` to the next note's `volume/7 * 0.35`.
-**Exports to:** No format change — this is audio playback accuracy.
+#### 2. Slide: ramps both pitch and volume — DONE
+Effect 1 now ramps gain from `prevVolume` to the current note's volume over the first 40% of the note, in addition to the pitch glide.
 
 ---
 
