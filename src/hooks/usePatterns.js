@@ -177,26 +177,28 @@ export function usePatterns(sfxSlots) {
 
     setPlayPos(idx);
 
-    // Note-position ticks (drive the progress bar; repeat each loop)
-    for (let ni = 0; ni < masterLength; ni++) {
+    // Schedule all 32 ticks upfront so changing loopEnd live doesn't need rescheduling.
+    // Steps beyond the active loopEnd won't fire because the Transport wraps first.
+    for (let ni = 0; ni < 32; ni++) {
       const ni_ = ni;
       transport.schedule(() => setNotePos(ni_), ni_ * noteDur);
     }
 
-    // Schedule one callback per step per channel — reads live SFX state on each fire.
+    // Schedule all 32 steps per channel — the live length check inside each callback
+    // lets the active window shrink/expand without rescheduling.
     pat.channels.forEach((sfxIdx, ci) => {
       const sfxIndex = sfxIdx ?? ci;
       const sfx = sfxSlots[sfxIndex];
       if (!sfx) return;
       const dur = sfx.speed / 60;
-      const chLength = sfx.length ?? 32;
 
-      for (let ni = 0; ni < chLength; ni++) {
+      for (let ni = 0; ni < 32; ni++) {
         const ni_ = ni;
         transport.schedule((audioTime) => {
           if (muteCheckRef.current(ci)) return;
-          const liveSfx   = sfxSlotsRef.current[sfxIndex];
-          const liveNote  = liveSfx.notes[ni_];
+          const liveSfx  = sfxSlotsRef.current[sfxIndex];
+          if (ni_ >= (liveSfx.length ?? 32)) return; // outside active window
+          const liveNote = liveSfx.notes[ni_];
           if (!liveNote.on) return;
           const prev       = ni_ > 0 ? liveSfx.notes[ni_ - 1] : liveNote;
           const arpPitches = [0, 1, 2, 3].map(o =>

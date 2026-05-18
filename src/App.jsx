@@ -385,7 +385,7 @@ export default function App() {
     if (patternPlayingRef.current) {
       // Live mode: quantize to the next step boundary
       const length   = sfxLengthRef.current;
-      const nextStep = (notePosRef.current + 1) % length;
+      const nextStep = notePosRef.current % (length || 1);
       updateNote(nextStep, { pitch: snapped, on: true });
     } else {
       updateNote(selRef.current, { pitch: snapped, on: true });
@@ -430,7 +430,7 @@ export default function App() {
     if (patternPlayingRef.current) {
       // Live mode: quantize to the next step boundary
       const length   = sfxLengthRef.current;
-      const nextStep = (notePosRef.current + 1) % length;
+      const nextStep = notePosRef.current % (length || 1);
       updateNote(nextStep, { pitch: snapped, on: true });
     } else {
       updateNote(selRef.current, { pitch: snapped, on: true });
@@ -456,7 +456,14 @@ export default function App() {
       onSpeedChange={v => updateSfxField({ speed: v })}
       onLoopStartChange={v => updateSfxField({ loopStart: v })}
       onLoopEndChange={v => updateSfxField({ loopEnd: v })}
-      onLengthChange={v => updateSfxField({ length: v })}
+      onLengthChange={v => {
+        updateSfxField({ length: v });
+        if (patterns.isPlaying) {
+          // Shift the loop window immediately — no restart needed because all
+          // 32 steps are pre-scheduled; the Transport's loopEnd controls which fire.
+          Tone.getTransport().loopEnd = (sfx.speed / 60) * v;
+        }
+      }}
     />
   );
 
@@ -561,7 +568,6 @@ export default function App() {
                       markInteracted();
                     }}
                     onDragPaint={(ni, on) => updateAnyNote(sfxIdx, ni, { on })}
-                    onDragPitch={(ni, pitch) => updateAnyNote(sfxIdx, ni, { pitch, on: true })}
                     rowHeight={72}
                     noteLabel={ci === 3 ? p => DRUM_NAMES[p] ?? noteName(p) : null}
                   />
