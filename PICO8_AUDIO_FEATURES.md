@@ -44,9 +44,9 @@ Each note:
 | 6 | Arpeggio fast | Cycle through this note AND the next 3 notes' pitches, every 4 ticks (2 ticks if SFX speed ≤ 8). |
 | 7 | Arpeggio slow | Same, every 8 ticks (4 ticks if SFX speed ≤ 8). |
 
-⚠️ **Arpeggio bug in current app:** The engine uses a hardcoded major-triad `[0, 4, 7]` semitone pattern. Real PICO-8 arpeggio iterates over the pitches of the current note AND the next 3 consecutive notes in the SFX. The chords are defined by what you put in notes n, n+1, n+2, n+3 — not a fixed interval pattern.
+Arpeggio iterates over the pitches of the current note AND the next 3 consecutive notes in the SFX. Chords are defined by notes n, n+1, n+2, n+3 — not a fixed interval pattern. ✅ Implemented correctly.
 
-⚠️ **Slide bug in current app:** Slide only ramps pitch. Real PICO-8 slides both pitch AND volume toward the next note's values.
+Slide ramps both pitch AND volume toward the next note's values. ✅ Implemented correctly.
 
 ### Filters (per SFX, not per note)
 
@@ -142,9 +142,9 @@ stat(51–53)-- current note on channels 1–3
 ## What the App Already Gets Right
 
 - SFX hex body format (notes, speed, loop fields) — ✅
-- `editor_mode` prefix byte (`00`) — ✅ fixed (168 chars total)
+- `editor_mode` prefix byte (`00`) — ✅ (168 chars total)
 - All 8 built-in waveforms — ✅ (audio approximation)
-- All 8 effects — ✅ arpeggio (consecutive note pitches, correct tick timing) and slide (pitch + volume) bugs fixed
+- All 8 effects — ✅ arpeggio (consecutive note pitches, correct tick timing) and slide (pitch + volume) both correct
 - `__music__` export with flags and 4 channel slots — ✅
 - Pattern loop/stop flags — ✅
 - 4-track playback with mute/solo — ✅
@@ -154,24 +154,16 @@ stat(51–53)-- current note on channels 1–3
   - Live length change updates `transport.loopEnd` immediately while playing
 - Live note input (piano/MIDI → lands on current step while sequencer runs) — ✅
 - Scale snap (CTRL in PICO-8 = our scale selector) — ✅
+- Drum preset library — ✅ 12 presets (KICK/SNARE/HAT/PERC) shown in NoteEditor for channel 3
 - Custom waveform instruments (W0–W7) — ✅ UI + audio complete
-  - SFX slots 0–7 toggle between note-sequence and waveform-drawing mode
-  - 64-column amplitude editor; Web Audio PeriodicWave synthesis via DFT
+  - SFX slots 0–7 toggle between note-sequence and waveform-drawing mode via `~ INST` button
+  - 64-column WavetableEditor; Web Audio PeriodicWave synthesis via DFT; cache invalidated on sample change
+  - W0–W7 buttons in NoteEditor (grayed when slot is not in waveform mode)
   - ⚠️ Export encoding (editor_mode byte + sample packing) is a best-guess — verify against real .p8 file
 
 ---
 
 ## Feature Backlog
-
-### ✅ Fixed — audio engine bugs
-
-#### 1. Arpeggio: consecutive note pitches — DONE
-Arpeggio now cycles through the pitches of notes n, n+1, n+2, n+3 from the live SFX state. Step timing uses PICO-8 tick math (4/60s fast, 8/60s slow, halved when speed ≤ 8). The `MAJOR_TRIAD` hack is gone.
-
-#### 2. Slide: ramps both pitch and volume — DONE
-Effect 1 now ramps gain from `prevVolume` to the current note's volume over the first 40% of the note, in addition to the pitch glide.
-
----
 
 ### 🟡 Medium — missing PICO-8 features
 
@@ -231,28 +223,6 @@ end
 **Exports to:** Lua game code (paste into `_update()`).
 
 ---
-
-### 🟢 Low — custom waveform instruments
-
-#### 9. Waveform instrument editor (instruments 8–15)
-**What it is:** SFX slots 0–7 in waveform mode. Each stores a **64-byte looping waveform** (signed amplitude samples). Used by referencing instrument 8–15 in any note.
-
-**Data model:**
-```js
-// Added to SFX 0–7 only:
-wavetable: false,
-samples: new Array(64).fill(0),  // signed, approx -7 to +7
-```
-
-**UI:**
-- `NOTE / WAVE` toggle button for slots 0–7
-- `WavetableEditor` component: 64 narrow columns, amplitude bars centered on midline, drag to set
-- Instrument picker gains entries 8–15 labeled "W0"–"W7" (grayed if slot not in wave mode)
-- Filter controls (item 3) still apply in waveform mode
-
-**Audio:** Build a `PeriodicWave` via DFT of the 64 samples → `ctx.createPeriodicWave(cos, sin)`. Cache per slot, invalidate on sample change.
-
-**Export:** ⚠️ 64 bytes need to be packed into the 32 × 5-char note slots — **exact encoding not verified**. Verification method below.
 
 ---
 
