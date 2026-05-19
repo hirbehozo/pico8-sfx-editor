@@ -144,13 +144,43 @@ export const MODE_LABELS = Object.fromEntries(
 export const CH_ROLES  = ['BASS', 'MELODY', 'CHORDS', 'DRUMS'];
 export const CH_COLORS = ['#29ADFF', '#00E436', '#FFEC27', '#FF77A8'];
 
-// Drum pad label map: pitch → short name shown in the DRUMS NoteGrid instead of note name.
-// Keyed by the default pitches from mkDrumSfx (C1=0, C2=12, C3=24, C5=48).
+// ── Drum preset library ───────────────────────────────────────────────────────
+// Each preset maps directly to a PICO-8 note: { pitch, waveform, volume, effect }.
+// Groups: KICK / SNARE / HAT / PERC
+
+export const DRUM_PRESETS = [
+  // ── Kicks ─ triangle + drop = pitch-sweep thud ──────────────────────────────
+  { cat: 'KICK',  name: '808',    color: '#FF004D', pitch: 5,  waveform: 0, volume: 7, effect: 3 },
+  { cat: 'KICK',  name: 'PUNCH',  color: '#FF004D', pitch: 12, waveform: 3, volume: 7, effect: 3 },
+  { cat: 'KICK',  name: 'SUB',    color: '#FF004D', pitch: 0,  waveform: 0, volume: 7, effect: 3 },
+
+  // ── Snares ─ noise burst with sharp attack or natural tail ───────────────────
+  { cat: 'SNARE', name: 'CRACK',  color: '#FFA300', pitch: 30, waveform: 6, volume: 7, effect: 3 },
+  { cat: 'SNARE', name: 'SNAP',   color: '#FFA300', pitch: 24, waveform: 6, volume: 6, effect: 5 },
+  { cat: 'SNARE', name: 'RIM',    color: '#FFA300', pitch: 38, waveform: 3, volume: 6, effect: 3 },
+
+  // ── Hi-hats ─ high-pitch noise at varying sustain lengths ───────────────────
+  { cat: 'HAT',   name: 'CLOSED', color: '#29ADFF', pitch: 62, waveform: 6, volume: 3, effect: 5 },
+  { cat: 'HAT',   name: 'OPEN',   color: '#29ADFF', pitch: 52, waveform: 6, volume: 5, effect: 5 },
+  { cat: 'HAT',   name: 'PEDAL',  color: '#29ADFF', pitch: 57, waveform: 6, volume: 2, effect: 5 },
+
+  // ── Perc ─ clap, tom, shaker ─────────────────────────────────────────────────
+  { cat: 'PERC',  name: 'CLAP',   color: '#FF77A8', pitch: 43, waveform: 6, volume: 6, effect: 5 },
+  { cat: 'PERC',  name: 'TOM',    color: '#FF77A8', pitch: 15, waveform: 0, volume: 7, effect: 3 },
+  { cat: 'PERC',  name: 'SHAKER', color: '#FF77A8', pitch: 48, waveform: 6, volume: 3, effect: 2 },
+];
+
+// Drum pad label map: pitch → short name shown in the DRUMS NoteGrid.
+// Covers all pitches used by DRUM_PRESETS so labels stay meaningful.
 export const DRUM_NAMES = {
-  0:  'KICK',
-  12: 'TOM',
-  24: 'SNARE',
-  48: 'HAT',
+  // Kicks
+  0:  'KICK', 5:  'KICK', 12: 'KICK',
+  // Snares
+  24: 'SNARE', 30: 'CRACK', 38: 'RIM',
+  // Hats
+  52: 'OHAT', 57: 'PHAT', 62: 'HAT',
+  // Toms / Perc
+  15: 'TOM', 43: 'CLAP', 48: 'SHAKE',
 };
 
 // 64 pitches: C1 (pitch 0) through D#6 (pitch 63)

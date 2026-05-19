@@ -2,6 +2,7 @@ import { useRef, useEffect, useState } from 'react';
 import { WAVE_COLS, EFF_COLS } from '../constants.js';
 import { noteName } from '../utils.js';
 import { audioEngine } from '../audio.js';
+import DrumLibrary from './DrumLibrary.jsx';
 
 const WAVE_LABELS = ['TRI', 'TSAW', 'SAW', 'SQR', 'PUL', 'ORG', 'NOI', 'PHA'];
 const EFF_LABELS  = ['NON', 'SLD',  'VIB', 'DRP', 'FDI', 'FDO', 'ARP', 'ARS'];
@@ -184,6 +185,19 @@ export default function NoteEditor({ note, noteIndex, onUpdate, nextPitch = null
 
   return (
     <div style={wrap}>
+
+      {/* ── Drum library (channel 3 only) ─────────────────────────────── */}
+      {channel === 3 && (
+        <DrumLibrary
+          note={note}
+          onApply={patch => {
+            onUpdate(patch);
+            // also re-preview with the new values so user hears the selection
+          }}
+          channel={channel}
+          isTouch={isTouch}
+        />
+      )}
 
       {/* ── Large pitch name ──────────────────────────────────────────── */}
       <div style={{
